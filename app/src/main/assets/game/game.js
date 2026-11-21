@@ -469,53 +469,34 @@
     return { w, h };
   }
 
+  function linCol(hex) {
+    if (hex && hex.isColor) return hex.clone();
+    return new THREE.Color(hex).convertSRGBToLinear();
+  }
+  function setSrgbHex(colorObj, hex) {
+    return colorObj.setHex(hex).convertSRGBToLinear();
+  }
+
   const renderer = createRenderer();
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
-  renderer.setClearColor(0x6ec3eb, 1);
+  renderer.setClearColor(linCol(0x5eb8e5), 1);
   renderer.shadowMap.enabled = true;
+  renderer.shadowMap.autoUpdate = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.08;
+  renderer.toneMappingExposure = 1.0;
   renderer.outputEncoding = THREE.sRGBEncoding;
 
   const scene = new THREE.Scene();
-  const currentSkyColor = new THREE.Color(0x6ec3eb);
-  const currentFogColor = new THREE.Color(0x9bd7f2);
+  const currentSkyColor = linCol(0x5eb8e5);
+  const currentFogColor = linCol(0x8bcbe8);
   scene.background = currentSkyColor;
-  scene.fog = new THREE.FogExp2(currentFogColor.getHex(), 0.0085);
-
-  // Procedural Outdoor HDR-Style Environment Map for Realistic PBR Metal/Glass Reflections
-  (function setupEnvironmentReflections() {
-    try {
-      const pmrem = new THREE.PMREMGenerator(renderer);
-      const envScene = new THREE.Scene();
-      const skyGeo = new THREE.SphereGeometry(20, 24, 16);
-      const skyMat = new THREE.ShaderMaterial({
-        side: THREE.BackSide,
-        uniforms: {
-          topColor: { value: new THREE.Color(0x38bdf8) },
-          midColor: { value: new THREE.Color(0xfffbeb) },
-          botColor: { value: new THREE.Color(0x1f3a2e) }
-        },
-        vertexShader: "varying vec3 vP; void main(){ vP=normalize(position); gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }",
-        fragmentShader: "uniform vec3 topColor,midColor,botColor; varying vec3 vP; void main(){ float h=vP.y; vec3 c=h>=0.0?mix(midColor,topColor,pow(h,0.55)):mix(midColor,botColor,pow(-h,0.45)); gl_FragColor=vec4(c,1.0); }"
-      });
-      envScene.add(new THREE.Mesh(skyGeo, skyMat));
-      const sunDisc = new THREE.Mesh(new THREE.SphereGeometry(1.6, 12, 12), new THREE.MeshBasicMaterial({ color: 0xfff8dc }));
-      sunDisc.position.set(8, 11, 7);
-      envScene.add(sunDisc);
-      const envRT = pmrem.fromScene(envScene, 0.035);
-      scene.environment = envRT.texture;
-      pmrem.dispose();
-    } catch (e) {
-      console.warn("PMREM env skipped:", e);
-    }
-  })();
+  scene.fog = new THREE.FogExp2(currentFogColor.getHex(), 0.0038);
 
   const initialSize = getViewportSize();
-  const camera = new THREE.PerspectiveCamera(50, initialSize.w / initialSize.h, 0.4, 210);
-  camera.position.set(0, 4.0, 8.2);
-  camera.lookAt(0, 1.4, 2.0);
+  const camera = new THREE.PerspectiveCamera(46, initialSize.w / initialSize.h, 0.4, 210);
+  camera.position.set(0, 2.35, 6.35);
+  camera.lookAt(0, 1.32, 1.7);
 
   let lastW = 0;
   let lastH = 0;
@@ -535,48 +516,73 @@
     new ResizeObserver(syncViewportSize).observe(document.body);
   }
 
-  // Atmospheric Sky Dome
+  // Atmospheric Sky Dome (linear uniforms + tonemapping & encodings match scene fog seamlessly)
   const skyUniforms = {
-    uTop: { value: new THREE.Color(0x3a9bd5) },
-    uHorizon: { value: new THREE.Color(0xcceeff) },
-    uBottom: { value: new THREE.Color(0x285f6b) }
+    uTop: { value: linCol(0x3da2dc) },
+    uHorizon: { value: linCol(0x9bd7f2) },
+    uBottom: { value: linCol(0x2a6678) }
   };
   const skyDome = new THREE.Mesh(
     new THREE.SphereGeometry(165, 28, 18),
     new THREE.ShaderMaterial({
       side: THREE.BackSide,
       depthWrite: false,
+      fog: false,
       uniforms: skyUniforms,
       vertexShader: "varying vec3 vWorldPos; void main(){ vec4 wp = modelMatrix * vec4(position,1.0); vWorldPos = position; gl_Position = projectionMatrix * viewMatrix * wp; }",
-      fragmentShader: "uniform vec3 uTop,uHorizon,uBottom; varying vec3 vWorldPos; void main(){ float y=normalize(vWorldPos).y; vec3 col = y > 0.0 ? mix(uHorizon, uTop, pow(y, 0.55)) : mix(uHorizon, uBottom, pow(-y, 0.6)); gl_FragColor=vec4(col,1.0); }"
+      fragmentShader: [
+        "uniform vec3 uTop,uHorizon,uBottom; varying vec3 vWorldPos;",
+        "void main(){",
+        "  float y = normalize(vWorldPos).y;",
+        "  vec3 col = y >= 0.0 ? mix(uHorizon, uTop, pow(max(y, 0.0001), 0.55)) : mix(uHorizon, uBottom, pow(max(-y, 0.0001), 0.6));",
+        "  gl_FragColor = vec4(col, 1.0);",
+        "  #include <tonemapping_fragment>",
+        "  #include <encodings_fragment>",
+        "}"
+      ].join("\n")
     })
   );
   scene.add(skyDome);
 
-  // Natural Three-Point Sun + Sky Fill + Rim Lighting
-  const hemiLight = new THREE.HemisphereLight(0xfffbeb, 0x223b2c, 0.72);
+  // Balanced 4-Light Outdoor Rig: warm AmbientLight + moss-bounce Hemisphere + 2 shadow-casting DirectionalLights
+  const ambientLight = new THREE.AmbientLight(linCol(0xfff4e0), 0.36);
+  scene.add(ambientLight);
+
+  const hemiLight = new THREE.HemisphereLight(linCol(0xd4eeff), linCol(0x364d2b), 0.52);
   scene.add(hemiLight);
 
-  const sunLight = new THREE.DirectionalLight(0xfff1d6, 1.35);
+  const d = 22;
+  const sunLight = new THREE.DirectionalLight(linCol(0xfff1d6), 1.32);
   sunLight.position.set(16, 26, 14);
   sunLight.castShadow = true;
   sunLight.shadow.mapSize.width = 1024;
   sunLight.shadow.mapSize.height = 1024;
   sunLight.shadow.camera.near = 2;
-  sunLight.shadow.camera.far = 82;
-  const d = 24;
+  sunLight.shadow.camera.far = 78;
   sunLight.shadow.camera.left = -d;
   sunLight.shadow.camera.right = d;
   sunLight.shadow.camera.top = d;
   sunLight.shadow.camera.bottom = -d;
-  sunLight.shadow.bias = -0.0006;
-  sunLight.shadow.normalBias = 0.02;
+  sunLight.shadow.bias = -0.0004;
+  sunLight.shadow.normalBias = 0.025;
   scene.add(sunLight);
   scene.add(sunLight.target);
 
-  const rimLight = new THREE.DirectionalLight(0x93c5fd, 0.42);
-  rimLight.position.set(-14, 12, -16);
+  const rimLight = new THREE.DirectionalLight(linCol(0xbbe6ff), 0.44);
+  rimLight.position.set(-14, 18, -16);
+  rimLight.castShadow = true;
+  rimLight.shadow.mapSize.width = 1024;
+  rimLight.shadow.mapSize.height = 1024;
+  rimLight.shadow.camera.near = 2;
+  rimLight.shadow.camera.far = 78;
+  rimLight.shadow.camera.left = -d;
+  rimLight.shadow.camera.right = d;
+  rimLight.shadow.camera.top = d;
+  rimLight.shadow.camera.bottom = -d;
+  rimLight.shadow.bias = -0.0004;
+  rimLight.shadow.normalBias = 0.025;
   scene.add(rimLight);
+  scene.add(rimLight.target);
 
   function applyGraphicsQuality() {
     const q = typeof state.graphicsQuality === "number" ? state.graphicsQuality : 1;
@@ -617,45 +623,51 @@
     return n - Math.floor(n);
   }
 
-  const texGrass = makeCanvasTex(256, 7, 7, true, (ctx, s) => {
-    ctx.fillStyle = "#3f8f47";
+  const texGrass = makeCanvasTex(256, 8, 8, true, (ctx, s) => {
+    ctx.fillStyle = "#c4ccb2";
     ctx.fillRect(0, 0, s, s);
-    for (let i = 0; i < 1800; i++) {
+    for (let i = 0; i < 160; i++) {
+      ctx.fillStyle = i % 2 === 0 ? "rgba(130, 148, 114, 0.28)" : "rgba(218, 226, 198, 0.24)";
+      ctx.beginPath();
+      ctx.arc(hash2(i, 9) * s, hash2(i, 10) * s, 5 + hash2(i, 11) * 10, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    for (let i = 0; i < 2000; i++) {
       const x = hash2(i, 1) * s;
       const y = hash2(i, 2) * s;
-      const g = Math.floor(110 + hash2(i, 3) * 65);
-      const r = Math.floor(38 + hash2(i, 4) * 35);
-      const b = Math.floor(38 + hash2(i, 5) * 28);
-      ctx.fillStyle = `rgba(${r},${g},${b},0.48)`;
-      ctx.fillRect(x, y, 2 + hash2(i, 6) * 2, 5 + hash2(i, 7) * 6);
+      const g = Math.floor(156 + hash2(i, 3) * 58);
+      const r = Math.floor(138 + hash2(i, 4) * 48);
+      const b = Math.floor(118 + hash2(i, 5) * 40);
+      ctx.fillStyle = `rgba(${r},${g},${b},0.46)`;
+      ctx.fillRect(x, y, 2, 4 + hash2(i, 7) * 5);
     }
-    for (let i = 0; i < 180; i++) {
-      ctx.fillStyle = "rgba(88, 66, 38, 0.16)";
+    for (let i = 0; i < 65; i++) {
+      ctx.fillStyle = "rgba(132, 110, 86, 0.2)";
       ctx.beginPath();
-      ctx.arc(hash2(i, 9) * s, hash2(i, 10) * s, 3 + hash2(i, 11) * 5, 0, Math.PI * 2);
+      ctx.arc(hash2(i, 12) * s, hash2(i, 13) * s, 2 + hash2(i, 14) * 3, 0, Math.PI * 2);
       ctx.fill();
     }
   });
 
-  const texGrassBump = makeCanvasTex(256, 7, 7, false, (ctx, s) => {
+  const texGrassBump = makeCanvasTex(256, 8, 8, false, (ctx, s) => {
     ctx.fillStyle = "#7f7f7f";
     ctx.fillRect(0, 0, s, s);
     for (let i = 0; i < 1400; i++) {
-      const v = Math.floor(85 + hash2(i, 15) * 140);
+      const v = Math.floor(75 + hash2(i, 15) * 150);
       ctx.fillStyle = `rgb(${v},${v},${v})`;
-      ctx.fillRect(hash2(i, 1) * s, hash2(i, 2) * s, 2, 6);
+      ctx.fillRect(hash2(i, 1) * s, hash2(i, 2) * s, 2, 5);
     }
   });
 
   const texCobble = makeCanvasTex(256, 3, 3, true, (ctx, s) => {
-    ctx.fillStyle = "#5c646d";
+    ctx.fillStyle = "#524b43";
     ctx.fillRect(0, 0, s, s);
     const cols = 6, rows = 6;
     const cw = s / cols, ch = s / rows;
     for (let ry = 0; ry < rows; ry++) {
       for (let cx = 0; cx < cols; cx++) {
         const ox = (ry % 2) * (cw * 0.45);
-        const shade = Math.floor(165 + hash2(cx, ry) * 40);
+        const shade = Math.floor(135 + hash2(cx, ry) * 38);
         ctx.fillStyle = `rgb(${shade},${shade - 4},${shade - 10})`;
         ctx.beginPath();
         ctx.roundRect ? ctx.roundRect((cx * cw + ox) % s + 2, ry * ch + 2, cw - 5, ch - 5, 7)
@@ -666,14 +678,14 @@
   });
 
   const texBark = makeCanvasTex(256, 2, 3, true, (ctx, s) => {
-    ctx.fillStyle = "#5c3419";
+    ctx.fillStyle = "#784520";
     ctx.fillRect(0, 0, s, s);
-    for (let i = 0; i < 420; i++) {
+    for (let i = 0; i < 480; i++) {
       const x = hash2(i, 21) * s;
       const y = hash2(i, 22) * s;
-      const dark = hash2(i, 23) > 0.45;
-      ctx.fillStyle = dark ? "rgba(38, 18, 6, 0.55)" : "rgba(130, 82, 46, 0.38)";
-      ctx.fillRect(x, y, 2 + hash2(i, 24) * 3, 18 + hash2(i, 25) * 36);
+      const dark = hash2(i, 23) > 0.42;
+      ctx.fillStyle = dark ? "rgba(48, 22, 8, 0.55)" : "rgba(150, 92, 50, 0.42)";
+      ctx.fillRect(x, y, 2 + hash2(i, 24) * 3, 18 + hash2(i, 25) * 38);
     }
   });
 
@@ -681,37 +693,38 @@
     ctx.fillStyle = "#808080";
     ctx.fillRect(0, 0, s, s);
     for (let i = 0; i < 420; i++) {
-      const v = hash2(i, 23) > 0.5 ? 45 : 210;
-      ctx.fillStyle = `rgba(${v},${v},${v},0.6)`;
+      const v = hash2(i, 23) > 0.5 ? 40 : 215;
+      ctx.fillStyle = `rgba(${v},${v},${v},0.62)`;
       ctx.fillRect(hash2(i, 21) * s, hash2(i, 22) * s, 3, 28);
     }
   });
 
   const texFoliage = makeCanvasTex(256, 2, 2, true, (ctx, s) => {
-    ctx.fillStyle = "#1d6e38";
+    ctx.fillStyle = "#62bf5a";
     ctx.fillRect(0, 0, s, s);
-    for (let i = 0; i < 900; i++) {
+    for (let i = 0; i < 950; i++) {
       const x = hash2(i, 31) * s;
       const y = hash2(i, 32) * s;
-      const g = Math.floor(110 + hash2(i, 33) * 105);
-      ctx.fillStyle = `rgba(34, ${g}, 58, 0.58)`;
+      const g = Math.floor(155 + hash2(i, 33) * 65);
+      const r = Math.floor(68 + hash2(i, 37) * 42);
+      ctx.fillStyle = `rgba(${r}, ${g}, 74, 0.65)`;
       ctx.beginPath();
       ctx.ellipse(x, y, 4 + hash2(i, 34) * 6, 2 + hash2(i, 35) * 3, hash2(i, 36) * Math.PI, 0, Math.PI * 2);
       ctx.fill();
     }
   });
 
-  const texRock = makeCanvasTex(256, 2, 2, true, (ctx, s) => {
-    ctx.fillStyle = "#6c7886";
+  const texRock = makeCanvasTex(256, 4, 4, true, (ctx, s) => {
+    ctx.fillStyle = "#8d98a6";
     ctx.fillRect(0, 0, s, s);
     for (let i = 0; i < 650; i++) {
-      const v = Math.floor(75 + hash2(i, 41) * 90);
-      ctx.fillStyle = `rgba(${v},${v + 4},${v + 10},0.45)`;
+      const v = Math.floor(110 + hash2(i, 41) * 78);
+      ctx.fillStyle = `rgba(${v},${v + 4},${v + 10},0.48)`;
       ctx.beginPath();
       ctx.arc(hash2(i, 42) * s, hash2(i, 43) * s, 3 + hash2(i, 44) * 10, 0, Math.PI * 2);
       ctx.fill();
     }
-    ctx.strokeStyle = "rgba(25, 32, 42, 0.45)";
+    ctx.strokeStyle = "rgba(42, 50, 62, 0.45)";
     ctx.lineWidth = 1.6;
     for (let j = 0; j < 26; j++) {
       ctx.beginPath();
@@ -723,18 +736,18 @@
   });
 
   const texWoodPlank = makeCanvasTex(256, 2, 2, true, (ctx, s) => {
-    ctx.fillStyle = "#9c5f2b";
+    ctx.fillStyle = "#a86932";
     ctx.fillRect(0, 0, s, s);
     const planks = 4;
     const ph = s / planks;
     for (let p = 0; p < planks; p++) {
-      const shade = (p % 2 === 0) ? "#a76832" : "#925826";
+      const shade = (p % 2 === 0) ? "#b8763c" : "#9c5f2b";
       ctx.fillStyle = shade;
       ctx.fillRect(0, p * ph + 2, s, ph - 3);
-      ctx.fillStyle = "rgba(48, 22, 6, 0.55)";
+      ctx.fillStyle = "rgba(56, 28, 10, 0.55)";
       ctx.fillRect(0, p * ph, s, 2);
       for (let g = 0; g < 35; g++) {
-        ctx.fillStyle = "rgba(64, 32, 10, 0.16)";
+        ctx.fillStyle = "rgba(68, 34, 12, 0.2)";
         ctx.fillRect(0, p * ph + hash2(p, g) * ph, s, 1.5);
       }
       ctx.fillStyle = "#334155";
@@ -746,17 +759,17 @@
   });
 
   const texBrushedMetal = makeCanvasTex(256, 2, 2, true, (ctx, s) => {
-    ctx.fillStyle = "#64748b";
+    ctx.fillStyle = "#94a3b8";
     ctx.fillRect(0, 0, s, s);
     for (let y = 0; y < s; y += 2) {
-      const v = Math.floor(90 + hash2(y, 55) * 45);
-      ctx.fillStyle = `rgba(${v},${v + 8},${v + 16},0.4)`;
+      const v = Math.floor(132 + hash2(y, 55) * 52);
+      ctx.fillStyle = `rgba(${v},${v + 5},${v + 12},0.45)`;
       ctx.fillRect(0, y, s, 1.5);
     }
-    ctx.strokeStyle = "rgba(15, 23, 42, 0.5)";
+    ctx.strokeStyle = "rgba(38, 48, 62, 0.45)";
     ctx.lineWidth = 3;
     ctx.strokeRect(4, 4, s - 8, s - 8);
-    ctx.fillStyle = "#cbd5e1";
+    ctx.fillStyle = "#e2e8f0";
     [[14, 14], [s - 14, 14], [14, s - 14], [s - 14, s - 14]].forEach(([rx, ry]) => {
       ctx.beginPath();
       ctx.arc(rx, ry, 3.5, 0, Math.PI * 2);
@@ -765,9 +778,9 @@
   });
 
   const texHazard = makeCanvasTex(256, 3, 1, true, (ctx, s) => {
-    ctx.fillStyle = "#f59e0b";
+    ctx.fillStyle = "#eab308";
     ctx.fillRect(0, 0, s, s);
-    ctx.fillStyle = "#111827";
+    ctx.fillStyle = "#1e293b";
     const step = 32;
     for (let x = -s; x < s * 2; x += step * 2) {
       ctx.beginPath();
@@ -780,21 +793,21 @@
     }
   });
 
-  const texSand = makeCanvasTex(256, 5, 5, true, (ctx, s) => {
-    ctx.fillStyle = "#dfa754";
+  const texSand = makeCanvasTex(256, 6, 6, true, (ctx, s) => {
+    ctx.fillStyle = "#dfa955";
     ctx.fillRect(0, 0, s, s);
     for (let y = 0; y < s; y += 10) {
-      ctx.fillStyle = "rgba(255, 232, 185, 0.14)";
+      ctx.fillStyle = "rgba(255, 228, 175, 0.2)";
       ctx.fillRect(0, y, s, 4);
-      ctx.fillStyle = "rgba(160, 100, 32, 0.14)";
+      ctx.fillStyle = "rgba(166, 108, 34, 0.18)";
       ctx.fillRect(0, y + 5, s, 3);
     }
   });
 
-  const texIce = makeCanvasTex(256, 4, 4, true, (ctx, s) => {
-    ctx.fillStyle = "#d4eefc";
+  const texIce = makeCanvasTex(256, 6, 6, true, (ctx, s) => {
+    ctx.fillStyle = "#b7e4fa";
     ctx.fillRect(0, 0, s, s);
-    ctx.strokeStyle = "rgba(125, 211, 252, 0.55)";
+    ctx.strokeStyle = "rgba(96, 185, 232, 0.65)";
     ctx.lineWidth = 2;
     for (let i = 0; i < 18; i++) {
       ctx.beginPath();
@@ -805,11 +818,11 @@
     }
   });
 
-  const texBasalt = makeCanvasTex(256, 4, 4, true, (ctx, s) => {
-    ctx.fillStyle = "#2b2423";
+  const texBasalt = makeCanvasTex(256, 6, 6, true, (ctx, s) => {
+    ctx.fillStyle = "#483c3a";
     ctx.fillRect(0, 0, s, s);
-    ctx.strokeStyle = "rgba(239, 68, 68, 0.45)";
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = "rgba(249, 115, 22, 0.65)";
+    ctx.lineWidth = 2.2;
     for (let i = 0; i < 14; i++) {
       ctx.beginPath();
       const x0 = hash2(i, 81) * s, y0 = hash2(i, 82) * s;
@@ -819,38 +832,50 @@
     }
   });
 
-  const texPlaid = makeCanvasTex(256, 2, 2, true, (ctx, s) => {
-    ctx.fillStyle = "#c82314";
+  const texPlaid = makeCanvasTex(256, 1.5, 1.5, true, (ctx, s) => {
+    ctx.fillStyle = "#c82317";
     ctx.fillRect(0, 0, s, s);
     const step = s / 4;
-    ctx.fillStyle = "rgba(25, 10, 8, 0.52)";
+    ctx.fillStyle = "rgba(22, 10, 8, 0.64)";
     for (let i = 0; i < 4; i += 2) {
       ctx.fillRect(i * step, 0, step, s);
       ctx.fillRect(0, i * step, s, step);
     }
-    ctx.fillStyle = "rgba(245, 92, 42, 0.25)";
+    ctx.fillStyle = "rgba(255, 115, 45, 0.28)";
     for (let i = 1; i < 4; i += 2) {
       ctx.fillRect(i * step, 0, 4, s);
       ctx.fillRect(0, i * step, s, 4);
     }
   });
 
-  // Helper PBR Materials
+  // Helper PBR & Unlit Materials (linearized sRGB hex colors for accurate r128 tone mapping)
   function pbrMat(color, opts) {
-    return new THREE.MeshStandardMaterial(Object.assign({
+    const merged = Object.assign({
       color,
-      roughness: 0.68,
-      metalness: 0.08
-    }, opts || {}));
+      roughness: 0.72,
+      metalness: 0.04
+    }, opts || {});
+    merged.color = linCol(merged.color);
+    if (merged.emissive !== undefined) merged.emissive = linCol(merged.emissive);
+    return new THREE.MeshStandardMaterial(merged);
   }
 
   function metalMat(color, opts) {
-    return new THREE.MeshStandardMaterial(Object.assign({
+    const merged = Object.assign({
       color,
-      roughness: 0.28,
-      metalness: 0.86,
-      envMapIntensity: 1.25
-    }, opts || {}));
+      roughness: 0.3,
+      metalness: 0.52
+    }, opts || {});
+    if (merged.metalness > 0.62) merged.metalness = 0.58;
+    merged.color = linCol(merged.color);
+    if (merged.emissive !== undefined) merged.emissive = linCol(merged.emissive);
+    return new THREE.MeshStandardMaterial(merged);
+  }
+
+  function basicMat(color, opts) {
+    const merged = Object.assign({ color }, opts || {});
+    merged.color = linCol(merged.color);
+    return new THREE.MeshBasicMaterial(merged);
   }
 
   // Sculpted Geometry Helpers
@@ -963,10 +988,9 @@
   const sawbladeGeo = makeSawbladeGeo(0.55, 16, 0.05);
 
   const shadowDiscGeo = new THREE.CircleGeometry(1, 18);
-  const shadowDiscMat = new THREE.MeshBasicMaterial({
-    color: 0x051009,
+  const shadowDiscMat = basicMat(0x051009, {
     transparent: true,
-    opacity: 0.28,
+    opacity: 0.34,
     depthWrite: false
   });
 
@@ -991,7 +1015,7 @@
     wg.add(tire);
     const hub = new THREE.Mesh(
       new THREE.CylinderGeometry(r * 0.56, r * 0.56, w * 1.04, 12),
-      metalMat(0xcbd5e1, { roughness: 0.3, metalness: 0.88 })
+      metalMat(0xcbd5e1, { roughness: 0.3, metalness: 0.6 })
     );
     hub.rotation.z = Math.PI / 2;
     wg.add(hub);
@@ -1001,7 +1025,7 @@
   // Helper to build a rounded industrial storage crate / product bar
   function createProductCrate(colHex, isBar) {
     if (isBar) {
-      const m = new THREE.Mesh(makeRoundedBoxGeo(0.38, 0.14, 0.2, 0.03), metalMat(colHex, { roughness: 0.22, metalness: 0.9 }));
+      const m = new THREE.Mesh(makeRoundedBoxGeo(0.38, 0.14, 0.2, 0.03), metalMat(colHex, { roughness: 0.22, metalness: 0.6 }));
       m.castShadow = true;
       return m;
     }
@@ -1021,10 +1045,10 @@
   // Shimmering Lagoon Water
   const waterMesh = new THREE.Mesh(
     new THREE.PlaneGeometry(340, 340),
-    pbrMat(0x287d99, { roughness: 0.16, metalness: 0.45, envMapIntensity: 1.3 })
+    pbrMat(0x1f85ad, { roughness: 0.2, metalness: 0.25 })
   );
   waterMesh.rotation.x = -Math.PI / 2;
-  waterMesh.position.y = -0.85;
+  waterMesh.position.y = -0.88;
   worldGroup.add(waterMesh);
 
   // Sculpted Distant Alpine Mountain Range
@@ -1045,16 +1069,16 @@
       }
     }
     mGeo.computeVertexNormals();
-    const body = new THREE.Mesh(mGeo, pbrMat(m % 2 === 0 ? 0x3b6e52 : 0x475569, { map: texRock, roughness: 0.85 }));
+    const body = new THREE.Mesh(mGeo, pbrMat(m % 2 === 0 ? 0x3b7a57 : 0x566575, { map: texRock, roughness: 0.85 }));
     body.position.y = peakH * 0.5;
     mtn.add(body);
-    const cap = new THREE.Mesh(new THREE.ConeGeometry(peakR * 0.36, peakH * 0.35, 9), pbrMat(0xf1f5f9, { roughness: 0.4 }));
+    const cap = new THREE.Mesh(new THREE.ConeGeometry(peakR * 0.36, peakH * 0.35, 9), pbrMat(0xeef5fc, { roughness: 0.45 }));
     cap.position.y = peakH * 0.82;
     mtn.add(cap);
     worldGroup.add(mtn);
   }
 
-  // Biome Platforms with Textured PBR Ground & Natural Cliff Skirts
+  // Vertex-Colored Sculpted Biome Terrains (grass meadows, dirt paths, soil berms, stone skirts)
   const biomeFloorTex = {
     forest: texGrass,
     mountains: texRock,
@@ -1064,32 +1088,114 @@
     jungle: texGrass
   };
 
+  function distToSegment(px, pz, ax, az, bx, bz) {
+    const dx = bx - ax, dz = bz - az;
+    const lenSq = dx * dx + dz * dz || 1;
+    const t = Math.max(0, Math.min(1, ((px - ax) * dx + (pz - az) * dz) / lenSq));
+    return Math.hypot(px - (ax + t * dx), pz - (az + t * dz));
+  }
+
   BIOMES.forEach((b, bi) => {
-    const padGeo = makeRoundedBoxGeo(31.8, 1.0, 31.8, 0.28);
-    const padMat = pbrMat(b.id === "forest" ? 0xffffff : b.ground, {
-      map: biomeFloorTex[b.id] || texRock,
-      bumpMap: b.id === "forest" ? texGrassBump : undefined,
-      bumpScale: 0.08,
-      roughness: b.id === "frozen" ? 0.35 : 0.82,
-      metalness: b.id === "frozen" ? 0.12 : 0.02
-    });
-    const pad = new THREE.Mesh(padGeo, padMat);
-    pad.position.set(b.cx, -0.5, b.cz);
-    pad.receiveShadow = true;
-    worldGroup.add(pad);
+    const baseRim = new THREE.Mesh(
+      makeRoundedBoxGeo(31.8, 0.92, 31.8, 0.28),
+      pbrMat(b.id === "forest" ? 0x6b4f35 : 0x64748b, { map: texRock, roughness: 0.88 })
+    );
+    baseRim.position.set(b.cx, -0.49, b.cz);
+    worldGroup.add(baseRim);
 
     const cliff = new THREE.Mesh(
-      makeRoundedBoxGeo(32.8, 0.8, 32.8, 0.22),
-      pbrMat(b.id === "forest" ? 0x6b4f2d : 0x475569, { map: texRock, roughness: 0.9 })
+      makeRoundedBoxGeo(32.9, 0.82, 32.9, 0.24),
+      pbrMat(b.id === "forest" ? 0x5c422c : 0x4b5563, { map: texRock, roughness: 0.9 })
     );
-    cliff.position.set(b.cx, -0.95, b.cz);
+    cliff.position.set(b.cx, -0.96, b.cz);
     worldGroup.add(cliff);
+
+    const segs = 48;
+    const topGeo = new THREE.PlaneGeometry(31.2, 31.2, segs, segs);
+    topGeo.rotateX(-Math.PI / 2);
+    const pos = topGeo.attributes.position;
+    const colors = new Float32Array(pos.count * 3);
+    const cMain = linCol(
+      b.id === "forest" ? 0x5ca842 :
+      (b.id === "mountains" ? 0x94a3b8 :
+      (b.id === "desert" ? 0xf5cc84 :
+      (b.id === "frozen" ? 0xd8effc :
+      (b.id === "volcanic" ? 0x705c5a : 0x269c5e))))
+    );
+    const cTrail = linCol(
+      b.id === "forest" ? 0xb57542 :
+      (b.id === "mountains" ? 0x717d8c :
+      (b.id === "desert" ? 0xd99e4c :
+      (b.id === "frozen" ? 0x9bd7f2 :
+      (b.id === "volcanic" ? 0x8f3a26 : 0x8f6f46))))
+    );
+    const cMoss = linCol(
+      b.id === "forest" ? 0x3b752c :
+      (b.id === "mountains" ? 0x5d6875 :
+      (b.id === "desert" ? 0xc28738 :
+      (b.id === "frozen" ? 0x82b8d9 :
+      (b.id === "volcanic" ? 0x3f3332 : 0x165e3e))))
+    );
+    const tmpCol = new THREE.Color();
+
+    for (let i = 0; i < pos.count; i++) {
+      const lx = pos.getX(i);
+      const lz = pos.getZ(i);
+      const n1 = Math.sin(lx * 0.42 + bi * 1.7) * Math.cos(lz * 0.38 - bi);
+      const n2 = Math.sin((lx + lz) * 0.75 + bi) * 0.5;
+      const edgeDist = Math.max(Math.abs(lx), Math.abs(lz));
+      const nearBridgeAxis = Math.abs(lx) < 3.0 || Math.abs(lz) < 3.0;
+
+      let pathFactor = 0;
+      if (b.id === "forest") {
+        const d1 = distToSegment(lx, lz, 0, 0.5, -4.6, 5.4);
+        const d2 = distToSegment(lx, lz, 0, 0.5, 7.5, 6.5);
+        const d3 = distToSegment(lx, lz, 0, 0.5, 7.5, -4.5);
+        const d4 = distToSegment(lx, lz, 0, 0.5, -8.0, -6.0);
+        const d5 = distToSegment(lx, lz, 0, -15.5, 0, 15.5);
+        const d6 = distToSegment(lx, lz, -15.5, 0, 15.5, 0);
+        const minPath = Math.min(d1, d2, d3, d4, d5, d6);
+        pathFactor = Math.max(0, Math.min(1, (2.1 - minPath) / 1.3));
+      } else {
+        const dCross = Math.min(Math.abs(lx), Math.abs(lz));
+        pathFactor = Math.max(0, Math.min(1, (2.0 - dCross) / 1.2));
+      }
+
+      let lift = 0;
+      if (edgeDist > 13.6 && !nearBridgeAxis) {
+        lift = ((edgeDist - 13.6) / 2.0) * (0.28 + n1 * 0.08);
+      } else if (pathFactor < 0.15 && Math.hypot(lx, lz) > 7.4) {
+        lift = Math.max(0, n1 * 0.05 + n2 * 0.025);
+      }
+      pos.setY(i, lift);
+
+      const mossWeight = Math.max(0, Math.min(1, 0.35 + n1 * 0.3 + (edgeDist > 12.6 ? 0.32 : 0)));
+      tmpCol.copy(cMain).lerp(cMoss, mossWeight).lerp(cTrail, pathFactor * 0.85);
+      colors[i * 3] = tmpCol.r;
+      colors[i * 3 + 1] = tmpCol.g;
+      colors[i * 3 + 2] = tmpCol.b;
+    }
+    topGeo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+    topGeo.computeVertexNormals();
+
+    const padMat = pbrMat(0xffffff, {
+      map: biomeFloorTex[b.id] || texRock,
+      bumpMap: b.id === "forest" ? texGrassBump : undefined,
+      bumpScale: 0.06,
+      vertexColors: true,
+      roughness: b.id === "frozen" ? 0.38 : 0.86,
+      metalness: b.id === "frozen" ? 0.1 : 0.02
+    });
+    const topMesh = new THREE.Mesh(topGeo, padMat);
+    topMesh.position.set(b.cx, 0.01, b.cz);
+    topMesh.receiveShadow = true;
+    worldGroup.add(topMesh);
 
     // Sculpted shoreline cliff boulders around platform corners
     [[-15.4, -15.4], [15.4, -15.4], [-15.4, 15.4], [15.4, 15.4]].forEach(([rx, rz], ci) => {
-      const cr = new THREE.Mesh(organicRockGeoA, pbrMat(0x52606d, { map: texRock, roughness: 0.9 }));
-      cr.scale.set(1.6, 0.85, 1.6);
-      cr.position.set(b.cx + rx, -0.65, b.cz + rz);
+      const cr = new THREE.Mesh(organicRockGeoA, pbrMat(0x738090, { map: texRock, roughness: 0.88 }));
+      cr.scale.set(1.65, 0.9, 1.65);
+      cr.position.set(b.cx + rx, -0.58, b.cz + rz);
       cr.rotation.y = ci + bi;
       worldGroup.add(cr);
     });
@@ -1097,16 +1203,16 @@
 
   // Central Cobble Courtyard & Natural Stepping Flagstones
   const plaza = new THREE.Mesh(
-    new THREE.CylinderGeometry(6.8, 7.2, 0.12, 24),
-    pbrMat(0xffffff, { map: texCobble, roughness: 0.78 })
+    new THREE.CylinderGeometry(6.6, 7.0, 0.12, 24),
+    pbrMat(0xdcd6cc, { map: texCobble, roughness: 0.82 })
   );
   plaza.position.set(0, 0.02, 0.5);
   plaza.receiveShadow = true;
   worldGroup.add(plaza);
 
   const stoneCurb = new THREE.Mesh(
-    new THREE.TorusGeometry(6.9, 0.18, 8, 32),
-    pbrMat(0x94a3b8, { map: texRock, roughness: 0.85 })
+    new THREE.TorusGeometry(6.75, 0.2, 8, 32),
+    pbrMat(0x7a8594, { map: texRock, roughness: 0.86 })
   );
   stoneCurb.rotation.x = Math.PI / 2;
   stoneCurb.position.set(0, 0.05, 0.5);
@@ -1115,13 +1221,13 @@
   [
     [0, -8.4], [0, -11.4], [0, -14.0],
     [8.2, 0], [11.2, 0], [-8.4, 0], [-11.4, 0],
-    [-2.4, 3.6], [-3.6, 4.6]
+    [-2.4, 3.6], [-3.6, 4.6], [4.2, 4.0], [5.4, 5.1]
   ].forEach(([sx, sz], si) => {
     const st = new THREE.Mesh(
-      makeOrganicGeo(0.75, 1, 0.16, si + 3.1),
-      pbrMat(0xcbd5e1, { map: texCobble, roughness: 0.8 })
+      makeOrganicGeo(0.72, 1, 0.16, si + 3.1),
+      pbrMat(0xb6bcc4, { map: texCobble, roughness: 0.84 })
     );
-    st.scale.set(1.0, 0.12, 0.95);
+    st.scale.set(1.0, 0.11, 0.95);
     st.position.set(sx, 0.04, sz);
     st.receiveShadow = true;
     worldGroup.add(st);
@@ -1135,7 +1241,7 @@
     for (let pi = -3; pi <= 3; pi++) {
       const plank = new THREE.Mesh(
         makeRoundedBoxGeo(5.4, 0.24, 0.72, 0.05),
-        pbrMat(0xffffff, { map: texWoodPlank, roughness: 0.72 })
+        pbrMat(0xe8d5bf, { map: texWoodPlank, roughness: 0.76 })
       );
       plank.position.set(0, 0.18 - Math.abs(pi) * 0.02, pi * 0.82);
       plank.receiveShadow = true;
@@ -1143,11 +1249,11 @@
       brGroup.add(plank);
     }
     [-2.55, 2.55].forEach((rx) => {
-      const beam = new THREE.Mesh(makeRoundedBoxGeo(0.26, 0.22, 5.8, 0.04), pbrMat(0x78350f, { map: texBark }));
+      const beam = new THREE.Mesh(makeRoundedBoxGeo(0.26, 0.22, 5.8, 0.04), pbrMat(0x6b3510, { map: texBark }));
       beam.position.set(rx, 0.68, 0);
       brGroup.add(beam);
       [-2.4, 0, 2.4].forEach((pz) => {
-        const post = new THREE.Mesh(makeCapsuleGeo(0.14, 0.75, 8), pbrMat(0x5c3419, { map: texBark }));
+        const post = new THREE.Mesh(makeCapsuleGeo(0.14, 0.75, 8), pbrMat(0x542c13, { map: texBark }));
         post.position.set(rx, 0.45, pz);
         post.castShadow = true;
         brGroup.add(post);
@@ -1161,14 +1267,15 @@
   addBridge(0, 17, 0);
   addBridge(34, -17, 0);
 
-  // Detailed Wildflowers, Grass Blades & Organic Bushes
+  // Detailed Wildflowers, Grass Blades, Fern Rosettes, Stumps, Logs, Mushrooms & Lamp Posts
   const grassTufts = [];
   const grassCoords = [
     [-7.5, 4.5], [-8.8, -4.2], [7.8, -1.8], [3.5, 8.2], [-1.5, 9.6],
     [-9.5, 7.2], [9.2, 4.2], [-5.8, -8.5], [6.2, -8.8], [12.5, -5.5],
-    [-12.2, -6.2], [8.5, 11.5], [-13.0, 11.2], [13.2, -12.0], [-4.2, 9.5], [4.4, -9.8]
+    [-12.2, -6.2], [8.5, 11.5], [-13.0, 11.2], [13.2, -12.0], [-4.2, 9.5], [4.4, -9.8],
+    [-3.2, -7.8], [3.6, -7.6], [-6.8, 2.1], [5.8, -1.6], [10.8, -7.2], [-11.4, 6.4]
   ];
-  const flowerColors = [0xfde047, 0xf472b6, 0xfef9c3, 0x60a5fa];
+  const flowerColors = [0xfacc15, 0xf472b6, 0xfef3c7, 0x60a5fa];
   const bladeShape = new THREE.Shape();
   bladeShape.moveTo(-0.07, 0);
   bladeShape.quadraticCurveTo(0.02, 0.28, 0.04, 0.52);
@@ -1178,22 +1285,22 @@
   grassCoords.forEach(([gx, gz], idx) => {
     const tuft = new THREE.Group();
     tuft.position.set(gx, 0, gz);
-    for (let b = 0; b < 4; b++) {
-      const blade = new THREE.Mesh(curvedBladeGeo, pbrMat(b % 2 === 0 ? 0x22c55e : 0x16a34a, { roughness: 0.6 }));
-      blade.rotation.y = b * 1.4;
-      blade.rotation.z = (b - 1.5) * 0.16;
+    for (let b = 0; b < 5; b++) {
+      const blade = new THREE.Mesh(curvedBladeGeo, pbrMat(b % 2 === 0 ? 0x22a84a : 0x15803d, { roughness: 0.65 }));
+      blade.rotation.y = b * 1.25;
+      blade.rotation.z = (b - 2) * 0.16;
       tuft.add(blade);
     }
     if (idx % 2 === 0) {
       const fCol = flowerColors[idx % flowerColors.length];
-      const fCenter = new THREE.Mesh(sphereGeo, pbrMat(0xf59e0b, { roughness: 0.4 }));
-      fCenter.scale.setScalar(0.08);
+      const fCenter = new THREE.Mesh(sphereGeo, pbrMat(0xd97706, { roughness: 0.4 }));
+      fCenter.scale.setScalar(0.075);
       fCenter.position.set(0.06, 0.48, 0.05);
       tuft.add(fCenter);
       for (let pt = 0; pt < 5; pt++) {
         const pAng = (pt / 5) * Math.PI * 2;
-        const petal = new THREE.Mesh(sphereGeo, pbrMat(fCol, { emissive: fCol, emissiveIntensity: 0.15, roughness: 0.4 }));
-        petal.scale.set(0.07, 0.03, 0.07);
+        const petal = new THREE.Mesh(sphereGeo, pbrMat(fCol, { emissive: fCol, emissiveIntensity: 0.1, roughness: 0.45 }));
+        petal.scale.set(0.068, 0.028, 0.068);
         petal.position.set(0.06 + Math.cos(pAng) * 0.09, 0.48, 0.05 + Math.sin(pAng) * 0.09);
         tuft.add(petal);
       }
@@ -1202,12 +1309,13 @@
     grassTufts.push(tuft);
   });
 
-  [[-12.5, 8.5], [12.8, 7.5], [-13.4, -10.5], [12.2, -12.2], [7.2, 12.6], [-8.4, 13.0]].forEach(([bx, bz], i) => {
+  // Forest Edge Bushes
+  [[-12.5, 8.5], [12.8, 7.5], [-13.4, -10.5], [12.2, -12.2], [7.2, 12.6], [-8.4, 13.0], [-14.2, -4.8], [14.1, 3.6]].forEach(([bx, bz], i) => {
     const bush = new THREE.Group();
     bush.position.set(bx, 0, bz);
     addContactShadow(bush, 1.05);
     for (let c = 0; c < 3; c++) {
-      const lobe = new THREE.Mesh(organicCanopyGeo, pbrMat(c === 0 ? 0x15803d : 0x22c55e, { map: texFoliage, roughness: 0.78 }));
+      const lobe = new THREE.Mesh(organicCanopyGeo, pbrMat(c === 0 ? 0x166534 : 0x229944, { map: texFoliage, roughness: 0.8 }));
       const sc = 0.68 - c * 0.12;
       lobe.scale.set(sc * 1.15, sc * 0.85, sc * 1.15);
       lobe.position.set((c - 1) * 0.34, 0.36 + (c === 1 ? 0.16 : 0), (c % 2) * 0.2);
@@ -1217,12 +1325,78 @@
     worldGroup.add(bush);
   });
 
+  // Natural Forest Dressing: Chopped Stumps, Mossy Logs, Toadstools & Warm Path Lanterns
+  [[-13.5, 4.5], [13.2, -5.5], [-9.2, 13.4], [9.8, 13.2]].forEach(([sx, sz], si) => {
+    const stump = new THREE.Group();
+    stump.position.set(sx, 0, sz);
+    addContactShadow(stump, 0.65);
+    const barkBody = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.44, 0.44, 10), pbrMat(0x8a5a36, { map: texBark, roughness: 0.88 }));
+    barkBody.position.y = 0.22;
+    barkBody.castShadow = true;
+    stump.add(barkBody);
+    const heartwood = new THREE.Mesh(new THREE.CylinderGeometry(0.29, 0.29, 0.04, 10), pbrMat(0xdcb47e, { roughness: 0.72 }));
+    heartwood.position.y = 0.44;
+    stump.add(heartwood);
+    for (let mi = 0; mi < 2; mi++) {
+      const mStem = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 0.12, 6), pbrMat(0xfef3c7));
+      mStem.position.set(0.36 + mi * 0.14, 0.06, (mi - 0.5) * 0.22);
+      stump.add(mStem);
+      const mCap = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.08, 7), pbrMat(mi === 0 ? 0xdc2626 : 0xf59e0b, { roughness: 0.5 }));
+      mCap.position.set(0.36 + mi * 0.14, 0.14, (mi - 0.5) * 0.22);
+      stump.add(mCap);
+    }
+    worldGroup.add(stump);
+  });
+
+  [[-13.0, -7.8, 0.5], [13.5, 5.2, -0.8]].forEach(([lx, lz, rot]) => {
+    const log = new THREE.Group();
+    log.position.set(lx, 0.24, lz);
+    log.rotation.y = rot;
+    const cyl = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.28, 2.2, 10), pbrMat(0x85522c, { map: texBark, roughness: 0.88 }));
+    cyl.rotation.z = Math.PI / 2;
+    cyl.castShadow = true;
+    log.add(cyl);
+    const mossPatch = new THREE.Mesh(organicCanopyGeo, pbrMat(0x2e8b40, { map: texFoliage, roughness: 0.85 }));
+    mossPatch.scale.set(0.55, 0.14, 0.24);
+    mossPatch.position.set(0.2, 0.22, 0);
+    log.add(mossPatch);
+    worldGroup.add(log);
+  });
+
+  [[-2.8, -13.6], [2.8, -13.6], [-6.6, 3.6], [6.4, 3.2]].forEach(([px, pz]) => {
+    const lamp = new THREE.Group();
+    lamp.position.set(px, 0, pz);
+    addContactShadow(lamp, 0.5);
+    const pole = new THREE.Mesh(makeCapsuleGeo(0.075, 1.8, 8), pbrMat(0x5c3419, { map: texBark }));
+    pole.position.y = 0.92;
+    pole.castShadow = true;
+    lamp.add(pole);
+    const cap = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.18, 6), metalMat(0x334155));
+    cap.position.y = 2.04;
+    lamp.add(cap);
+    const bulb = new THREE.Mesh(sphereGeo, pbrMat(0xfde047, { emissive: 0xf59e0b, emissiveIntensity: 1.0, roughness: 0.2 }));
+    bulb.scale.set(0.11, 0.14, 0.11);
+    bulb.position.y = 1.88;
+    lamp.add(bulb);
+    worldGroup.add(lamp);
+  });
+
+  [[-13.8, -13.6], [13.8, -13.6], [-13.6, 13.6], [13.8, 13.5]].forEach(([rx, rz], ri) => {
+    const rk = new THREE.Mesh(organicRockGeoA, pbrMat(0x788492, { map: texRock, flatShading: true, roughness: 0.9 }));
+    rk.scale.set(1.1, 0.72, 1.0);
+    rk.position.set(rx, 0.35, rz);
+    rk.rotation.y = ri * 1.1;
+    rk.castShadow = true;
+    rk.receiveShadow = true;
+    worldGroup.add(rk);
+  });
+
   // Soft Multi-Lobe Volumetric Clouds
   const skyClouds = [];
   [[-14, 16, -18], [12, 18, -24], [-6, 17, 14], [18, 16, 8], [-24, 17, -6]].forEach(([cx, cy, cz], idx) => {
     const cg = new THREE.Group();
     cg.position.set(cx, cy, cz);
-    const puffMat = pbrMat(0xffffff, { roughness: 0.95, metalness: 0.0, emissive: 0xffffff, emissiveIntensity: 0.18 });
+    const puffMat = pbrMat(0xf1f5f9, { roughness: 0.95, metalness: 0.0, emissive: 0xe2e8f0, emissiveIntensity: 0.12 });
     [[0, 0, 0, 1.6, 0.75, 1.2], [-1.15, -0.15, 0.2, 1.1, 0.55, 0.95], [1.2, -0.1, -0.15, 1.2, 0.6, 0.95], [0.2, 0.35, 0.1, 0.95, 0.55, 0.85]].forEach(([px, py, pz, sx, sy, sz], pi) => {
       const puff = new THREE.Mesh(makeOrganicGeo(1, 1, 0.16, idx + pi), puffMat);
       puff.scale.set(sx, sy, sz);
@@ -1238,7 +1412,7 @@
   for (let fi = 0; fi < 22; fi++) {
     const fMesh = new THREE.Mesh(
       sphereGeo,
-      new THREE.MeshBasicMaterial({ color: fi % 2 === 0 ? 0xfef08a : 0xa7f3d0 })
+      basicMat(fi % 2 === 0 ? 0xfef08a : 0xa7f3d0)
     );
     fMesh.scale.setScalar(0.065);
     const fx = (Math.random() - 0.5) * 24;
@@ -1257,7 +1431,7 @@
 
   const sellRing = new THREE.Mesh(
     new THREE.RingGeometry(2.3, 2.85, 32),
-    new THREE.MeshBasicMaterial({ color: 0xf6b73c, side: THREE.DoubleSide })
+    basicMat(0xf59e0b, { side: THREE.DoubleSide })
   );
   sellRing.rotation.x = -Math.PI / 2;
   sellRing.position.y = 0.04;
@@ -1265,7 +1439,7 @@
 
   const sellFloor = new THREE.Mesh(
     new THREE.CylinderGeometry(2.3, 2.45, 0.12, 24),
-    pbrMat(0xf59e0b, { map: texCobble, emissive: 0x78350f, emissiveIntensity: 0.25, roughness: 0.65 })
+    pbrMat(0xd97706, { map: texCobble, emissive: 0x78350f, emissiveIntensity: 0.18, roughness: 0.68 })
   );
   sellFloor.receiveShadow = true;
   sellPadGroup.add(sellFloor);
@@ -1274,7 +1448,7 @@
   stall.position.set(-1.95, 0, 1.95);
   addContactShadow(stall, 2.2);
   // Timber deck & posts
-  const deck = new THREE.Mesh(makeRoundedBoxGeo(2.5, 0.2, 2.0, 0.04), pbrMat(0xffffff, { map: texWoodPlank }));
+  const deck = new THREE.Mesh(makeRoundedBoxGeo(2.5, 0.2, 2.0, 0.04), pbrMat(0xe5d3be, { map: texWoodPlank }));
   deck.position.y = 0.1;
   deck.receiveShadow = true;
   stall.add(deck);
@@ -1312,14 +1486,14 @@
   barrel.castShadow = true;
   stall.add(barrel);
 
-  const lantern = new THREE.Mesh(sphereGeo, pbrMat(0xfef08a, { emissive: 0xf59e0b, emissiveIntensity: 1.1, roughness: 0.2 }));
+  const lantern = new THREE.Mesh(sphereGeo, pbrMat(0xfef08a, { emissive: 0xf59e0b, emissiveIntensity: 0.95, roughness: 0.2 }));
   lantern.scale.set(0.14, 0.2, 0.14);
   lantern.position.set(0.95, 1.68, -0.78);
   stall.add(lantern);
 
   const coinSign = new THREE.Mesh(
     new THREE.CylinderGeometry(0.54, 0.54, 0.12, 20),
-    metalMat(0xfbbf24, { emissive: 0xd97706, emissiveIntensity: 0.35, roughness: 0.22, metalness: 0.92 })
+    metalMat(0xfbbf24, { emissive: 0xd97706, emissiveIntensity: 0.25, roughness: 0.22, metalness: 0.6 })
   );
   coinSign.rotation.x = Math.PI / 2;
   coinSign.position.set(0, 3.15, 0);
@@ -1335,25 +1509,24 @@
     if (b.gate.dir === "x") gGroup.rotation.y = Math.PI / 2;
 
     [-2.4, 2.4].forEach((px) => {
-      const pillar = new THREE.Mesh(makeRoundedBoxGeo(0.85, 3.2, 0.85, 0.08), pbrMat(0x64748b, { map: texCobble, roughness: 0.8 }));
+      const pillar = new THREE.Mesh(makeRoundedBoxGeo(0.85, 3.2, 0.85, 0.08), pbrMat(0x64748b, { map: texCobble, roughness: 0.82 }));
       pillar.position.set(px, 1.6, 0);
       pillar.castShadow = true;
       gGroup.add(pillar);
-      const cap = new THREE.Mesh(makeOrganicGeo(0.52, 1, 0.15, px), pbrMat(b.accent, { emissive: b.accent, emissiveIntensity: 0.4, roughness: 0.3 }));
+      const cap = new THREE.Mesh(makeOrganicGeo(0.52, 1, 0.15, px), pbrMat(b.accent, { emissive: b.accent, emissiveIntensity: 0.35, roughness: 0.3 }));
       cap.position.set(px, 3.35, 0);
       gGroup.add(cap);
     });
 
     const barrier = new THREE.Mesh(
       makeRoundedBoxGeo(4.1, 2.5, 0.24, 0.06),
-      new THREE.MeshStandardMaterial({
-        color: b.accent,
+      pbrMat(b.accent, {
         transparent: true,
-        opacity: 0.48,
+        opacity: 0.45,
         emissive: b.accent,
-        emissiveIntensity: 0.55,
-        roughness: 0.15,
-        metalness: 0.4
+        emissiveIntensity: 0.45,
+        roughness: 0.18,
+        metalness: 0.35
       })
     );
     barrier.position.set(0, 1.35, 0);
@@ -1361,7 +1534,7 @@
 
     const padRing = new THREE.Mesh(
       new THREE.RingGeometry(1.4, 1.85, 24),
-      new THREE.MeshBasicMaterial({ color: 0xfbbf24, side: THREE.DoubleSide })
+      basicMat(0xfbbf24, { side: THREE.DoubleSide })
     );
     padRing.rotation.x = -Math.PI / 2;
     padRing.position.set(0, 0.08, 0);
@@ -1378,14 +1551,14 @@
     grp.position.set(def.x, 0, def.z);
     addContactShadow(grp, 2.1);
 
-    const padMesh = new THREE.Mesh(new THREE.CylinderGeometry(1.95, 2.08, 0.14, 24), pbrMat(0x334155, { map: texBrushedMetal, roughness: 0.55 }));
+    const padMesh = new THREE.Mesh(new THREE.CylinderGeometry(1.95, 2.08, 0.14, 24), pbrMat(0x64748b, { map: texBrushedMetal, roughness: 0.56 }));
     padMesh.position.y = 0.06;
     padMesh.receiveShadow = true;
     grp.add(padMesh);
 
     const ring = new THREE.Mesh(
       new THREE.RingGeometry(1.68, 1.98, 28),
-      new THREE.MeshBasicMaterial({ color: 0x10b981, side: THREE.DoubleSide })
+      basicMat(0x10b981, { side: THREE.DoubleSide })
     );
     ring.rotation.x = -Math.PI / 2;
     ring.position.y = 0.14;
@@ -1396,10 +1569,10 @@
 
     const baseHull = new THREE.Mesh(
       makeRoundedBoxGeo(2.2, 1.35, 2.2, 0.08),
-      pbrMat(def.id === "smelter" ? 0x475569 : (def.id === "warehouse" ? 0x1e3a8a : 0x92400e), {
+      pbrMat(def.id === "smelter" ? 0x64748b : (def.id === "warehouse" ? 0x2563eb : 0xc2711b), {
         map: def.id === "sawmill" ? texWoodPlank : texBrushedMetal,
-        roughness: 0.52,
-        metalness: def.id === "sawmill" ? 0.15 : 0.45
+        roughness: 0.5,
+        metalness: def.id === "sawmill" ? 0.12 : 0.4
       })
     );
     baseHull.position.y = 0.78;
@@ -1409,7 +1582,7 @@
     // Pitched industrial roof + exhaust chimney
     const bRoof = new THREE.Mesh(
       new THREE.ConeGeometry(1.75, 0.75, 4),
-      pbrMat(def.id === "smelter" ? 0x991b1b : 0xb45309, { roughness: 0.55 })
+      pbrMat(def.id === "smelter" ? 0xb91c1c : 0xd97706, { roughness: 0.52 })
     );
     bRoof.rotation.y = Math.PI / 4;
     bRoof.position.y = 1.82;
@@ -1418,7 +1591,7 @@
 
     const chimney = new THREE.Mesh(
       new THREE.CylinderGeometry(0.16, 0.22, 1.1, 10),
-      metalMat(0x334155)
+      metalMat(0x64748b)
     );
     chimney.position.set(0.65, 1.9, -0.55);
     struct.add(chimney);
@@ -1492,7 +1665,7 @@
     if (machineSmoke.length > 28) return;
     const m = new THREE.Mesh(
       makeOrganicGeo(0.22, 0, 0.15, wx),
-      new THREE.MeshStandardMaterial({ color: col || 0xd1d5db, transparent: true, opacity: 0.55, roughness: 0.95 })
+      pbrMat(col || 0xd1d5db, { transparent: true, opacity: 0.52, roughness: 0.95 })
     );
     m.position.set(wx + (Math.random() - 0.5) * 0.15, wy, wz + (Math.random() - 0.5) * 0.15);
     scene.add(m);
@@ -1508,7 +1681,7 @@
     // Subtle Blueprint Foundation Pad (visible when biome unlocked, machine not yet bought)
     const pad = new THREE.Mesh(
       makeRoundedBoxGeo(def.id === "conveyor_belt" ? 2.0 : 2.3, 0.12, def.id === "conveyor_belt" ? 5.6 : 2.3, 0.04),
-      pbrMat(0x1e293b, { map: texBrushedMetal, roughness: 0.65 })
+      pbrMat(0x64748b, { map: texBrushedMetal, roughness: 0.58 })
     );
     pad.position.y = 0.06;
     pad.receiveShadow = true;
@@ -1526,7 +1699,7 @@
     grp.add(rig);
 
     // Control Console + Glowing Status LED (Green = Running, Red = Paused)
-    const consoleBox = new THREE.Mesh(makeRoundedBoxGeo(0.42, 0.85, 0.36, 0.04), metalMat(0x334155));
+    const consoleBox = new THREE.Mesh(makeRoundedBoxGeo(0.42, 0.85, 0.36, 0.04), metalMat(0x475569));
     consoleBox.position.set(-0.92, 0.52, 0.88);
     rig.add(consoleBox);
     const statusLed = new THREE.Mesh(sphereGeo, pbrMat(0x22c55e, { emissive: 0x22c55e, emissiveIntensity: 1.3 }));
@@ -1725,7 +1898,7 @@
       anim.rotParts.push({ mesh: gem, axis: "y", speed: 2.0 });
     } else {
       // Industrial Factory: Bay Hull + Dual Articulated Robotic Assembly Arms
-      const bay = new THREE.Mesh(makeRoundedBoxGeo(2.2, 1.15, 2.0, 0.07), metalMat(0x334155));
+      const bay = new THREE.Mesh(makeRoundedBoxGeo(2.2, 1.15, 2.0, 0.07), metalMat(0x475569));
       bay.position.y = 0.68;
       bay.castShadow = true;
       rig.add(bay);
@@ -1903,7 +2076,7 @@
     engineBay.castShadow = true;
     turret.add(engineBay);
 
-    const cab = new THREE.Mesh(makeRoundedBoxGeo(0.68, 0.98, 0.92, 0.08), metalMat(0x0f172a, { roughness: 0.25 }));
+    const cab = new THREE.Mesh(makeRoundedBoxGeo(0.68, 0.98, 0.92, 0.08), metalMat(0x334155, { roughness: 0.28 }));
     cab.position.set(-0.42, 0.65, 0.25);
     turret.add(cab);
 
@@ -1962,38 +2135,28 @@
   const flyingDrops = [];
   const particles = [];
 
-  function createNodeMesh(kind, biomeId) {
+  function createNodeMesh(kind, biomeId, variantIdx) {
     const grp = new THREE.Group();
-    addContactShadow(grp, kind === "wood" ? 1.35 : 1.1);
+    addContactShadow(grp, kind === "wood" ? 1.45 : 1.15);
 
     const visualRoot = new THREE.Group();
     grp.add(visualRoot);
     let crackMesh = null;
 
     if (kind === "wood") {
-      // Flared Buttress Roots + Tapered Bark Trunk + Forked Limbs + Sculpted Canopy Clusters
+      const isPine = biomeId === "mountains" || biomeId === "frozen" || (biomeId === "forest" && (variantIdx % 3 === 1));
       const trunkPts = [
-        new THREE.Vector2(0.46, 0.0),
-        new THREE.Vector2(0.28, 0.25),
-        new THREE.Vector2(0.21, 0.85),
-        new THREE.Vector2(0.15, 1.65),
-        new THREE.Vector2(0.08, 2.3)
+        new THREE.Vector2(0.48, 0.0),
+        new THREE.Vector2(0.30, 0.25),
+        new THREE.Vector2(0.22, 0.85),
+        new THREE.Vector2(0.16, 1.65),
+        new THREE.Vector2(0.08, isPine ? 2.65 : 2.3)
       ];
       const trunkGeo = new THREE.LatheGeometry(trunkPts, 10);
-      const trunk = new THREE.Mesh(trunkGeo, pbrMat(0xffffff, { map: texBark, bumpMap: texBarkBump, bumpScale: 0.08, roughness: 0.88 }));
+      const trunk = new THREE.Mesh(trunkGeo, pbrMat(0xe4cfb8, { map: texBark, bumpMap: texBarkBump, bumpScale: 0.09, roughness: 0.88 }));
       trunk.castShadow = true;
+      trunk.receiveShadow = true;
       visualRoot.add(trunk);
-
-      // 3 Natural Angled Tree Boughs
-      for (let bi = 0; bi < 3; bi++) {
-        const bAng = bi * (Math.PI * 2 / 3) + 0.4;
-        const bough = new THREE.Mesh(makeCapsuleGeo(0.065, 0.72, 7), pbrMat(0xffffff, { map: texBark, roughness: 0.9 }));
-        bough.position.set(Math.cos(bAng) * 0.26, 1.32 + bi * 0.16, Math.sin(bAng) * 0.26);
-        bough.rotation.z = -Math.cos(bAng) * 0.72;
-        bough.rotation.x = Math.sin(bAng) * 0.72;
-        bough.castShadow = true;
-        visualRoot.add(bough);
-      }
 
       // Axe Chop Wedge Notch
       crackMesh = new THREE.Mesh(
@@ -2005,42 +2168,75 @@
       crackMesh.visible = false;
       visualRoot.add(crackMesh);
 
-      const leafA = biomeId === "frozen" ? 0x99f6e4 : (biomeId === "jungle" ? 0x059669 : 0x22a84f);
-      const leafB = biomeId === "frozen" ? 0xcffafe : (biomeId === "jungle" ? 0x10b981 : 0x34d36a);
-      const clusters = [
-        [0, 2.15, 0, 1.12, 0.85, leafA],
-        [-0.58, 1.85, 0.42, 0.78, 0.62, leafB],
-        [0.62, 1.9, -0.35, 0.76, 0.6, leafA],
-        [0.12, 2.68, 0.22, 0.74, 0.68, leafB],
-        [0, 3.12, 0, 0.52, 0.55, leafA]
-      ];
-      clusters.forEach(([lx, ly, lz, sx, sy, col], ci) => {
-        const foliage = new THREE.Mesh(
-          makeOrganicGeo(1, 1, 0.25, ci + 1.5),
-          pbrMat(col, { map: texFoliage, roughness: 0.76 })
-        );
-        foliage.scale.set(sx, sy, sx);
-        foliage.position.set(lx, ly, lz);
-        foliage.castShadow = true;
-        visualRoot.add(foliage);
-      });
+      if (isPine) {
+        const pineDark = biomeId === "frozen" ? 0x67c5c9 : 0x1a743b;
+        const pineLit = biomeId === "frozen" ? 0xa5e6eb : 0x269b50;
+        const tiers = [
+          [1.62, 1.25, 1.35, pineDark],
+          [2.32, 0.98, 1.22, pineLit],
+          [2.95, 0.72, 1.12, pineDark],
+          [3.52, 0.45, 0.95, pineLit]
+        ];
+        tiers.forEach(([ty, tr, th, col], ti) => {
+          const tierCone = new THREE.Mesh(
+            new THREE.ConeGeometry(tr, th, 9),
+            pbrMat(col, { map: texFoliage, flatShading: true, roughness: 0.82 })
+          );
+          tierCone.position.y = ty;
+          tierCone.rotation.y = ti * 0.65;
+          tierCone.castShadow = true;
+          tierCone.receiveShadow = true;
+          visualRoot.add(tierCone);
+        });
+      } else {
+        for (let bi = 0; bi < 3; bi++) {
+          const bAng = bi * (Math.PI * 2 / 3) + 0.4;
+          const bough = new THREE.Mesh(makeCapsuleGeo(0.068, 0.74, 7), pbrMat(0xe4cfb8, { map: texBark, roughness: 0.9 }));
+          bough.position.set(Math.cos(bAng) * 0.26, 1.34 + bi * 0.16, Math.sin(bAng) * 0.26);
+          bough.rotation.z = -Math.cos(bAng) * 0.72;
+          bough.rotation.x = Math.sin(bAng) * 0.72;
+          bough.castShadow = true;
+          visualRoot.add(bough);
+        }
+
+        const leafA = biomeId === "frozen" ? 0x6fd1cb : (biomeId === "jungle" ? 0x0d7a55 : 0x268f40);
+        const leafB = biomeId === "frozen" ? 0xa7ece8 : (biomeId === "jungle" ? 0x16a36b : 0x3eb857);
+        const clusters = [
+          [0, 2.2, 0, 1.18, 0.88, leafA],
+          [-0.6, 1.92, 0.42, 0.82, 0.64, leafB],
+          [0.64, 1.96, -0.35, 0.78, 0.62, leafA],
+          [0.14, 2.74, 0.22, 0.76, 0.7, leafB],
+          [0, 3.22, 0, 0.56, 0.56, leafB]
+        ];
+        clusters.forEach(([lx, ly, lz, sx, sy, col], ci) => {
+          const foliage = new THREE.Mesh(
+            makeOrganicGeo(1, 1, 0.25, ci + 1.5),
+            pbrMat(col, { map: texFoliage, roughness: 0.8 })
+          );
+          foliage.scale.set(sx, sy, sx);
+          foliage.position.set(lx, ly, lz);
+          foliage.castShadow = true;
+          foliage.receiveShadow = true;
+          visualRoot.add(foliage);
+        });
+      }
     } else if (kind === "crystal" || kind === "rare") {
       const col = RESOURCES[kind].color;
       // Stone Cluster Base + Faceted Hexagonal Crystal Spires
-      const baseBed = new THREE.Mesh(organicRockGeoA, pbrMat(0x334155, { map: texRock, roughness: 0.85 }));
-      baseBed.scale.set(0.9, 0.34, 0.85);
+      const baseBed = new THREE.Mesh(organicRockGeoA, pbrMat(0x64748b, { map: texRock, flatShading: true, roughness: 0.88 }));
+      baseBed.scale.set(0.92, 0.36, 0.88);
       baseBed.position.y = 0.22;
+      baseBed.castShadow = true;
       visualRoot.add(baseBed);
 
-      const shardMat = new THREE.MeshStandardMaterial({
-        color: col,
+      const shardMat = pbrMat(col, {
         emissive: col,
-        emissiveIntensity: 0.45,
-        roughness: 0.12,
-        metalness: 0.25,
-        envMapIntensity: 1.5
+        emissiveIntensity: 0.38,
+        roughness: 0.16,
+        metalness: 0.28,
+        flatShading: true
       });
-      [[0, 0.82, 0, 1.0, 1.15, 0], [-0.36, 0.62, 0.24, 0.68, 0.82, 0.35], [0.38, 0.58, -0.2, 0.65, 0.76, -0.32]].forEach(([sx, sy, sz, rx, ry, rz]) => {
+      [[0, 0.84, 0, 1.0, 1.18, 0], [-0.36, 0.62, 0.24, 0.68, 0.84, 0.35], [0.38, 0.58, -0.2, 0.65, 0.78, -0.32]].forEach(([sx, sy, sz, rx, ry, rz]) => {
         const sp = new THREE.Mesh(crystalPrismGeo, shardMat);
         sp.scale.set(rx, ry, rx);
         sp.position.set(sx, sy, sz);
@@ -2048,28 +2244,36 @@
         sp.castShadow = true;
         visualRoot.add(sp);
       });
-      crackMesh = new THREE.Mesh(new THREE.RingGeometry(0.45, 0.68, 6), new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide }));
+      crackMesh = new THREE.Mesh(new THREE.RingGeometry(0.45, 0.68, 6), basicMat(0xffffff, { side: THREE.DoubleSide }));
       crackMesh.rotation.x = -Math.PI / 2;
       crackMesh.position.y = 0.35;
       crackMesh.visible = false;
       visualRoot.add(crackMesh);
     } else {
-      // Natural Irregular Stratified Boulder + Ore Seam Deposits
+      // Natural Irregular Stratified Boulder + Moss Collar + Ore Seam Deposits
       const mainGeo = kind === "stone" ? organicRockGeoA : organicRockGeoB;
       const baseRock = new THREE.Mesh(
         mainGeo,
-        pbrMat(kind === "coal" ? 0x3f3f46 : 0x7c8a99, { map: texRock, roughness: 0.88 })
+        pbrMat(kind === "coal" ? 0x4b525c : 0x8c97a4, { map: texRock, flatShading: true, roughness: 0.88 })
       );
-      baseRock.scale.set(0.95, 0.72, 0.88);
+      baseRock.scale.set(0.98, 0.74, 0.9);
       baseRock.position.y = 0.52;
       baseRock.castShadow = true;
+      baseRock.receiveShadow = true;
       visualRoot.add(baseRock);
 
-      const sideRock = new THREE.Mesh(organicRockGeoA, pbrMat(0x52606d, { map: texRock, roughness: 0.9 }));
-      sideRock.scale.set(0.5, 0.38, 0.46);
+      const sideRock = new THREE.Mesh(organicRockGeoA, pbrMat(0x6d7987, { map: texRock, flatShading: true, roughness: 0.9 }));
+      sideRock.scale.set(0.54, 0.4, 0.48);
       sideRock.position.set(0.62, 0.26, 0.32);
       sideRock.castShadow = true;
       visualRoot.add(sideRock);
+
+      if (biomeId === "forest") {
+        const mossCap = new THREE.Mesh(organicCanopyGeo, pbrMat(0x2e853e, { map: texFoliage, roughness: 0.85 }));
+        mossCap.scale.set(0.46, 0.14, 0.42);
+        mossCap.position.set(-0.22, 0.92, -0.15);
+        visualRoot.add(mossCap);
+      }
 
       crackMesh = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.08, 0.14), pbrMat(0x0f172a));
       crackMesh.position.y = 0.62;
@@ -2081,15 +2285,17 @@
         const oreCol = RESOURCES[kind].color;
         const oreMat = metalMat(oreCol, {
           emissive: kind === "gold" ? 0xb45309 : 0x000000,
-          emissiveIntensity: 0.28,
-          roughness: 0.26,
-          metalness: 0.88
+          emissiveIntensity: 0.22,
+          roughness: 0.25,
+          metalness: 0.6,
+          flatShading: true
         });
-        for (let i = 0; i < 5; i++) {
+        for (let i = 0; i < 6; i++) {
           const nugget = new THREE.Mesh(makeOrganicGeo(0.22, 0, 0.26, i + 2), oreMat);
-          const ang = i * 1.26;
-          nugget.position.set(Math.cos(ang) * 0.56, 0.56 + (i % 2) * 0.22, Math.sin(ang) * 0.54);
+          const ang = i * 1.05;
+          nugget.position.set(Math.cos(ang) * 0.56, 0.54 + (i % 2) * 0.24, Math.sin(ang) * 0.54);
           nugget.rotation.set(0.4, ang, 0.3);
+          nugget.castShadow = true;
           visualRoot.add(nugget);
         }
       }
@@ -2152,7 +2358,7 @@
     ];
 
     specs.forEach((sp, i) => {
-      const built = createNodeMesh(sp.kind, sp.biome);
+      const built = createNodeMesh(sp.kind, sp.biome, i);
       built.grp.position.set(sp.x, 0, sp.z);
       built.grp.rotation.y = (i * 1.37) % (Math.PI * 2);
       worldGroup.add(built.grp);
@@ -2183,93 +2389,112 @@
   const playerGroup = new THREE.Group();
   playerGroup.position.set(0, 0, 2);
   scene.add(playerGroup);
-  addContactShadow(playerGroup, 0.8);
+  addContactShadow(playerGroup, 0.92);
 
   const playerBodyPivot = new THREE.Group();
+  playerBodyPivot.scale.setScalar(1.12);
   playerGroup.add(playerBodyPivot);
 
-  // Buffalo-Plaid Flannel Shirt Torso (softly contoured toy-hero proportions)
-  const torsoMat = pbrMat(0xffffff, { map: texPlaid, roughness: 0.62, metalness: 0.04 });
-  const torsoGeo = makeRoundedBoxGeo(0.76, 0.84, 0.46, 0.11);
+  // Buffalo-Plaid Flannel Shirt Torso + Collar Lapels + Leather Belt
+  const torsoMat = pbrMat(0xffffff, { map: texPlaid, roughness: 0.68, metalness: 0.04 });
+  const torsoGeo = makeRoundedBoxGeo(0.8, 0.86, 0.48, 0.12);
   const torso = new THREE.Mesh(torsoGeo, torsoMat);
   torso.position.y = 1.08;
   torso.castShadow = true;
   playerBodyPivot.add(torso);
 
-  // Shirt Collar V-Opening + Undershirt Neck
-  const neckMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, 0.2, 12), pbrMat(0xffd97d, { roughness: 0.5 }));
+  // Shirt Collar Lapels + Warm Skin Neck
+  const neckMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.17, 0.22, 12), pbrMat(0xffd275, { roughness: 0.5 }));
   neckMesh.position.y = 1.54;
   playerBodyPivot.add(neckMesh);
+  [-0.14, 0.14].forEach((lx, li) => {
+    const lapel = new THREE.Mesh(makeRoundedBoxGeo(0.2, 0.08, 0.26, 0.025), torsoMat);
+    lapel.position.set(lx, 1.49, 0.08);
+    lapel.rotation.z = li === 0 ? 0.22 : -0.22;
+    lapel.rotation.y = li === 0 ? 0.35 : -0.35;
+    playerBodyPivot.add(lapel);
+  });
 
   // Dark Brown Leather Belt + Golden Square Frame Buckle
-  const belt = new THREE.Mesh(makeRoundedBoxGeo(0.8, 0.14, 0.5, 0.04), pbrMat(0x452212, { roughness: 0.55 }));
-  belt.position.y = 0.72;
+  const belt = new THREE.Mesh(makeRoundedBoxGeo(0.84, 0.15, 0.52, 0.04), pbrMat(0x452212, { roughness: 0.55 }));
+  belt.position.y = 0.71;
   playerBodyPivot.add(belt);
-  const buckle = new THREE.Mesh(makeRoundedBoxGeo(0.18, 0.15, 0.07, 0.025), metalMat(0xf59e0b, { roughness: 0.25 }));
-  buckle.position.set(0, 0.72, 0.24);
+  const buckle = new THREE.Mesh(makeRoundedBoxGeo(0.2, 0.16, 0.08, 0.025), metalMat(0xf59e0b, { roughness: 0.24 }));
+  buckle.position.set(0, 0.71, 0.25);
   playerBodyPivot.add(buckle);
 
-  // Smooth Rounded Cylindrical Toy-Hero Head, Ears, Pill Eyes & Happy Smile
-  const skinMat = pbrMat(0xffdb8a, { roughness: 0.48, metalness: 0.02 });
+  // Smooth Rounded Cylindrical Toy-Hero Head, Ears, Glossy Eyes, Cheek Warmth & Smile
+  const skinMat = pbrMat(0xffd275, { roughness: 0.5, metalness: 0.02 });
   const headPts = [
     new THREE.Vector2(0.01, -0.31),
-    new THREE.Vector2(0.24, -0.3),
-    new THREE.Vector2(0.32, -0.22),
-    new THREE.Vector2(0.32, 0.22),
-    new THREE.Vector2(0.24, 0.31),
+    new THREE.Vector2(0.25, -0.3),
+    new THREE.Vector2(0.33, -0.22),
+    new THREE.Vector2(0.33, 0.22),
+    new THREE.Vector2(0.25, 0.31),
     new THREE.Vector2(0.01, 0.32)
   ];
   const head = new THREE.Mesh(new THREE.LatheGeometry(headPts, 20), skinMat);
-  head.position.y = 1.88;
+  head.position.y = 1.9;
   head.castShadow = true;
   playerBodyPivot.add(head);
 
   // Rounded Side Ears
-  [-0.31, 0.31].forEach((ex) => {
+  [-0.32, 0.32].forEach((ex) => {
     const ear = new THREE.Mesh(sphereGeo, skinMat);
-    ear.scale.set(0.06, 0.09, 0.07);
-    ear.position.set(ex, 1.84, 0.0);
+    ear.scale.set(0.065, 0.095, 0.075);
+    ear.position.set(ex, 1.86, 0.0);
     playerBodyPivot.add(ear);
   });
 
-  // Expressive Dark Pill Eyes + Happy Curved Smile
-  const eyeMat = pbrMat(0x111827, { roughness: 0.18 });
-  [-0.1, 0.1].forEach((ex) => {
-    const eye = new THREE.Mesh(makeCapsuleGeo(0.036, 0.08, 10), eyeMat);
-    eye.position.set(ex, 1.91, 0.3);
+  // Expressive Dark Pill Eyes + Glossy White Catchlights + Warm Cheeks + Happy Smile
+  const eyeMat = pbrMat(0x0f172a, { roughness: 0.16 });
+  const glintMat = basicMat(0xffffff);
+  [-0.105, 0.105].forEach((ex) => {
+    const eye = new THREE.Mesh(makeCapsuleGeo(0.038, 0.085, 10), eyeMat);
+    eye.position.set(ex, 1.93, 0.31);
     playerBodyPivot.add(eye);
+    const glint = new THREE.Mesh(sphereGeo, glintMat);
+    glint.scale.setScalar(0.014);
+    glint.position.set(ex + 0.015, 1.97, 0.346);
+    playerBodyPivot.add(glint);
+    const cheek = new THREE.Mesh(sphereGeo, pbrMat(0xfca5a5, { roughness: 0.7 }));
+    cheek.scale.set(0.055, 0.032, 0.025);
+    cheek.position.set(ex * 1.65, 1.82, 0.295);
+    playerBodyPivot.add(cheek);
   });
-  const smileGeo = new THREE.TorusGeometry(0.1, 0.022, 8, 16, Math.PI * 0.85);
+  const smileGeo = new THREE.TorusGeometry(0.1, 0.024, 8, 16, Math.PI * 0.85);
   const smile = new THREE.Mesh(smileGeo, eyeMat);
   smile.rotation.z = Math.PI * 1.075;
-  smile.position.set(0, 1.77, 0.3);
+  smile.position.set(0, 1.79, 0.31);
   playerBodyPivot.add(smile);
 
   // Iconic Spiky Vibrant Orange Hair Crown
-  const hairMat = pbrMat(0xf97316, { roughness: 0.38, metalness: 0.05 });
+  const hairMat = pbrMat(0xf9690e, { roughness: 0.42, metalness: 0.04 });
   const hairGroup = new THREE.Group();
-  hairGroup.position.set(0, 2.08, -0.02);
+  hairGroup.position.set(0, 2.1, -0.02);
   playerBodyPivot.add(hairGroup);
 
   const hairCap = new THREE.Mesh(sphereGeo, hairMat);
-  hairCap.scale.set(0.34, 0.16, 0.34);
+  hairCap.scale.set(0.35, 0.17, 0.35);
   hairCap.position.y = 0.04;
   hairCap.castShadow = true;
   hairGroup.add(hairCap);
 
-  const backHair = new THREE.Mesh(makeRoundedBoxGeo(0.62, 0.32, 0.24, 0.08), hairMat);
+  const backHair = new THREE.Mesh(makeRoundedBoxGeo(0.64, 0.34, 0.24, 0.08), hairMat);
   backHair.position.set(0, -0.08, -0.2);
   hairGroup.add(backHair);
 
-  // 7 Swept Flame-Like Spikes matching reference silhouette
+  // 9 Swept Flame-Like Spikes matching reference silhouette
   const hairSpikes = [
-    [-0.18, 0.18, 0.14, 0.14, 0.36, 0.35, -0.2],
-    [0.0,   0.25, 0.16, 0.15, 0.44, 0.0,  -0.28],
-    [0.18,  0.2,  0.14, 0.14, 0.38, -0.35, -0.2],
-    [-0.27, 0.11, 0.02, 0.12, 0.3,  0.65, -0.15],
-    [0.27,  0.11, 0.02, 0.12, 0.3,  -0.65, -0.15],
-    [-0.11, 0.22, -0.08, 0.14, 0.4, 0.25, -0.45],
-    [0.12,  0.22, -0.08, 0.14, 0.4, -0.25, -0.45]
+    [-0.18, 0.19, 0.14, 0.14, 0.38, 0.35, -0.2],
+    [0.0,   0.26, 0.16, 0.15, 0.46, 0.0,  -0.28],
+    [0.18,  0.21, 0.14, 0.14, 0.40, -0.35, -0.2],
+    [-0.28, 0.11, 0.02, 0.12, 0.32, 0.65, -0.15],
+    [0.28,  0.11, 0.02, 0.12, 0.32, -0.65, -0.15],
+    [-0.11, 0.23, -0.08, 0.14, 0.42, 0.25, -0.45],
+    [0.12,  0.23, -0.08, 0.14, 0.42, -0.25, -0.45],
+    [-0.24, 0.02, 0.18, 0.09, 0.22, 0.85, 0.12],
+    [0.24,  0.02, 0.18, 0.09, 0.22, -0.85, 0.12]
   ];
   hairSpikes.forEach(([hx, hy, hz, r, h, rz, rx]) => {
     const spike = new THREE.Mesh(new THREE.ConeGeometry(r, h, 8), hairMat);
@@ -2282,7 +2507,7 @@
 
   const helmetCrest = new THREE.Mesh(octaGeo, metalMat(0x22d3ee, { emissive: 0x06b6d4, emissiveIntensity: 0.7 }));
   helmetCrest.scale.set(0.14, 0.2, 0.14);
-  helmetCrest.position.set(0, 2.52, 0.08);
+  helmetCrest.position.set(0, 2.54, 0.08);
   helmetCrest.visible = false;
   playerBodyPivot.add(helmetCrest);
 
@@ -2290,11 +2515,11 @@
   const pauldronMat = metalMat(0x64748b);
   const pauldronL = new THREE.Mesh(makeOrganicGeo(0.22, 1, 0.12, 1), pauldronMat);
   pauldronL.scale.set(1.1, 0.7, 1.12);
-  pauldronL.position.set(-0.48, 1.46, 0);
+  pauldronL.position.set(-0.5, 1.46, 0);
   pauldronL.visible = false;
   playerBodyPivot.add(pauldronL);
   const pauldronR = pauldronL.clone();
-  pauldronR.position.x = 0.48;
+  pauldronR.position.x = 0.5;
   playerBodyPivot.add(pauldronR);
 
   // Chainsaw/Power Pack Harness
@@ -2304,8 +2529,8 @@
   playerBodyPivot.add(powerPackMesh);
 
   const playerAuraRing = new THREE.Mesh(
-    new THREE.RingGeometry(0.88, 1.08, 28),
-    new THREE.MeshBasicMaterial({ color: 0xe879f9, side: THREE.DoubleSide, transparent: true, opacity: 0.65 })
+    new THREE.RingGeometry(0.95, 1.18, 28),
+    basicMat(0xe879f9, { side: THREE.DoubleSide, transparent: true, opacity: 0.65 })
   );
   playerAuraRing.rotation.x = -Math.PI / 2;
   playerAuraRing.position.y = 0.05;
@@ -2313,62 +2538,62 @@
   playerGroup.add(playerAuraRing);
 
   // Charcoal Trousers + Chunky Tan-Orange Work Boots with Laces
-  const legMat = pbrMat(0x2d2926, { roughness: 0.72 });
-  const bootMat = pbrMat(0xf59e0b, { roughness: 0.46, metalness: 0.05 });
-  const soleMat = pbrMat(0x452212, { roughness: 0.8 });
+  const legMat = pbrMat(0x2e2b29, { roughness: 0.72 });
+  const bootMat = pbrMat(0xf59e0b, { roughness: 0.48, metalness: 0.04 });
+  const soleMat = pbrMat(0x452212, { roughness: 0.82 });
   function makeLeg(x) {
     const lg = new THREE.Group();
     lg.position.set(x, 0.66, 0);
-    const limb = new THREE.Mesh(makeCapsuleGeo(0.12, 0.36, 10), legMat);
+    const limb = new THREE.Mesh(makeCapsuleGeo(0.125, 0.36, 10), legMat);
     limb.position.y = -0.22;
     limb.castShadow = true;
     lg.add(limb);
 
-    const bootBody = new THREE.Mesh(makeRoundedBoxGeo(0.26, 0.2, 0.38, 0.07), bootMat);
+    const bootBody = new THREE.Mesh(makeRoundedBoxGeo(0.27, 0.21, 0.4, 0.075), bootMat);
     bootBody.position.set(0, -0.54, 0.06);
     bootBody.castShadow = true;
     lg.add(bootBody);
-    const bootCuff = new THREE.Mesh(new THREE.CylinderGeometry(0.135, 0.145, 0.14, 12), bootMat);
+    const bootCuff = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.15, 0.15, 12), bootMat);
     bootCuff.position.set(0, -0.42, 0);
     lg.add(bootCuff);
-    const sole = new THREE.Mesh(makeRoundedBoxGeo(0.28, 0.055, 0.4, 0.02), soleMat);
+    const sole = new THREE.Mesh(makeRoundedBoxGeo(0.29, 0.06, 0.42, 0.02), soleMat);
     sole.position.set(0, -0.64, 0.06);
     lg.add(sole);
-    const lace = new THREE.Mesh(makeRoundedBoxGeo(0.11, 0.08, 0.05, 0.01), soleMat);
-    lace.position.set(0, -0.44, 0.14);
+    const lace = new THREE.Mesh(makeRoundedBoxGeo(0.11, 0.09, 0.05, 0.01), soleMat);
+    lace.position.set(0, -0.44, 0.15);
     lg.add(lace);
 
     playerBodyPivot.add(lg);
     return lg;
   }
-  const legL = makeLeg(-0.18);
-  const legR = makeLeg(0.18);
+  const legL = makeLeg(-0.19);
+  const legR = makeLeg(0.19);
 
   // Articulated Arms with Flannel Sleeves, Brown Leather Wristbands & Rounded Hands
   const wristMat = pbrMat(0x452212, { roughness: 0.6 });
   function buildHeroArm(sideX) {
     const piv = new THREE.Group();
     piv.position.set(sideX, 1.4, 0);
-    const sleeve = new THREE.Mesh(makeCapsuleGeo(0.115, 0.16, 10), torsoMat);
+    const sleeve = new THREE.Mesh(makeCapsuleGeo(0.12, 0.16, 10), torsoMat);
     sleeve.position.y = -0.1;
     sleeve.castShadow = true;
     piv.add(sleeve);
-    const forearm = new THREE.Mesh(makeCapsuleGeo(0.092, 0.28, 10), skinMat);
+    const forearm = new THREE.Mesh(makeCapsuleGeo(0.096, 0.28, 10), skinMat);
     forearm.position.y = -0.3;
     forearm.castShadow = true;
     piv.add(forearm);
-    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.105, 0.105, 0.1, 12), wristMat);
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.108, 0.108, 0.1, 12), wristMat);
     band.position.y = -0.39;
     piv.add(band);
     const hand = new THREE.Mesh(sphereGeo, skinMat);
-    hand.scale.set(0.11, 0.11, 0.11);
+    hand.scale.set(0.115, 0.115, 0.115);
     hand.position.y = -0.5;
     piv.add(hand);
     playerBodyPivot.add(piv);
     return piv;
   }
-  const armL = buildHeroArm(-0.47);
-  const armRPivot = buildHeroArm(0.47);
+  const armL = buildHeroArm(-0.49);
+  const armRPivot = buildHeroArm(0.49);
 
   const toolGroup = new THREE.Group();
   toolGroup.position.set(0, -0.52, 0.14);
@@ -2526,20 +2751,20 @@
   function refreshCharacterVisuals() {
     const bagLvl = Math.min(Math.max(state.backpackLevel, 1), 8);
     const bagCol = TIER_COLORS[bagLvl - 1];
-    backpackMat.color.setHex(bagCol);
+    setSrgbHex(backpackMat.color, bagCol);
     const s = 1 + (bagLvl - 1) * 0.08;
     backpackMesh.scale.set(s, s, s);
     backpackMesh.position.z = -0.35 - (bagLvl - 1) * 0.02;
     bagPodL.visible = bagLvl >= 4;
     bagPodR.visible = bagLvl >= 4;
-    bagPodMat.color.setHex(bagLvl >= 7 ? 0x22d3ee : (bagLvl >= 6 ? 0xfbbf24 : 0xcbd5e1));
+    setSrgbHex(bagPodMat.color, bagLvl >= 7 ? 0x22d3ee : (bagLvl >= 6 ? 0xfbbf24 : 0xcbd5e1));
     bagCore.visible = bagLvl >= 7;
     if (bagLvl === 8) {
-      bagCoreMat.color.setHex(0xe879f9);
-      bagCoreMat.emissive.setHex(0xe879f9);
+      setSrgbHex(bagCoreMat.color, 0xe879f9);
+      setSrgbHex(bagCoreMat.emissive, 0xe879f9);
     } else {
-      bagCoreMat.color.setHex(0x22d3ee);
-      bagCoreMat.emissive.setHex(0x22d3ee);
+      setSrgbHex(bagCoreMat.color, 0x22d3ee);
+      setSrgbHex(bagCoreMat.emissive, 0x22d3ee);
     }
 
     const avgGear = (state.axeLevel + state.pickaxeLevel + state.backpackLevel + state.moveSpeedLevel + state.gatherSpeedLevel) / 5;
@@ -2550,20 +2775,20 @@
     powerPackMesh.visible = getFleetLevel("chainsaw_drill") > 0;
 
     if (avgGear >= 7.0) {
-      torsoMat.color.setHex(0xe9d5ff);
-      hairMat.color.setHex(0xfde047);
-      pauldronMat.color.setHex(0xe879f9);
+      setSrgbHex(torsoMat.color, 0xe9d5ff);
+      setSrgbHex(hairMat.color, 0xfde047);
+      setSrgbHex(pauldronMat.color, 0xe879f9);
     } else if (avgGear >= 5.8) {
-      torsoMat.color.setHex(0xbae6fd);
-      hairMat.color.setHex(0xfb923c);
-      pauldronMat.color.setHex(0x38bdf8);
+      setSrgbHex(torsoMat.color, 0xbae6fd);
+      setSrgbHex(hairMat.color, 0xfb923c);
+      setSrgbHex(pauldronMat.color, 0x38bdf8);
     } else if (avgGear >= 4.2) {
-      torsoMat.color.setHex(0xfef3c7);
-      hairMat.color.setHex(0xf97316);
-      pauldronMat.color.setHex(0xfbbf24);
+      setSrgbHex(torsoMat.color, 0xfef3c7);
+      setSrgbHex(hairMat.color, 0xf9690e);
+      setSrgbHex(pauldronMat.color, 0xfbbf24);
     } else {
-      torsoMat.color.setHex(0xffffff);
-      hairMat.color.setHex(0xf97316);
+      setSrgbHex(torsoMat.color, 0xffffff);
+      setSrgbHex(hairMat.color, 0xf9690e);
     }
 
     updateActiveToolMesh();
@@ -2786,7 +3011,7 @@
       const workers = getBuildingWorkers(def.id);
       const lines = getBuildingLines(def.id);
       wb.struct.visible = lvl > 0;
-      wb.ring.material.color.setHex(lvl > 0 ? 0xfbbf24 : 0x10b981);
+      setSrgbHex(wb.ring.material.color, lvl > 0 ? 0xfbbf24 : 0x10b981);
       wb.lineModules.forEach((m, idx) => { m.visible = lvl > 0 && idx < lines; });
       wb.workerMeshes.forEach((m, idx) => { m.visible = lvl > 0 && idx < workers; });
     });
@@ -2800,8 +3025,8 @@
       const biomeOpen = isBiomeUnlocked(def.biome);
       wm.group.visible = biomeOpen || lvl > 0;
       wm.rig.visible = lvl > 0;
-      wm.statusLed.material.color.setHex(running ? 0x22c55e : 0xef4444);
-      wm.statusLed.material.emissive.setHex(running ? 0x22c55e : 0xef4444);
+      setSrgbHex(wm.statusLed.material.color, running ? 0x22c55e : 0xef4444);
+      setSrgbHex(wm.statusLed.material.emissive, running ? 0x22c55e : 0xef4444);
     });
 
     // Update Fleet Vehicles & Cargo Containers
@@ -2909,19 +3134,23 @@
 
       if (isMenuMode) {
         const orbitAng = Math.sin(now * 0.00035) * 0.42;
-        camera.position.x += (px + Math.sin(orbitAng) * 5.6 - camera.position.x) * camLerp;
-        camera.position.y += (4.0 - camera.position.y) * camLerp;
-        camera.position.z += (pz + Math.cos(orbitAng) * 6.2 - camera.position.z) * camLerp;
-        camera.lookAt(px, 1.35, pz - 1.1);
+        camera.position.x += (px + Math.sin(orbitAng) * 3.1 - camera.position.x) * camLerp;
+        camera.position.y += (2.35 - camera.position.y) * camLerp;
+        camera.position.z += (pz + Math.cos(orbitAng) * 4.35 - camera.position.z) * camLerp;
+        camera.lookAt(px, 1.32, pz - 0.3);
       } else {
         camera.position.x += (px - camera.position.x) * camLerp;
-        camera.position.y += (14.2 - camera.position.y) * camLerp;
-        camera.position.z += (pz + 13.2 - camera.position.z) * camLerp;
-        camera.lookAt(px, 0.9, pz - 0.6);
+        camera.position.y += (8.4 - camera.position.y) * camLerp;
+        camera.position.z += (pz + 8.6 - camera.position.z) * camLerp;
+        camera.lookAt(px, 1.05, pz - 0.5);
       }
 
       sunLight.position.set(px + 16, 26, pz + 14);
       sunLight.target.position.set(px, 0, pz);
+      sunLight.target.updateMatrixWorld();
+      rimLight.position.set(px - 14, 18, pz - 16);
+      rimLight.target.position.set(px, 0, pz);
+      rimLight.target.updateMatrixWorld();
       skyDome.position.set(px, 0, pz);
 
       // 3. Biome Atmosphere Transition & Compose HUD Sync
@@ -2932,10 +3161,11 @@
           try { window.AndroidBridge.onBiomeChanged(bNow.id); } catch (_) {}
         }
       }
-      currentSkyColor.lerp(new THREE.Color(bNow.sky), dt * 2.5);
-      currentFogColor.lerp(new THREE.Color(bNow.fog), dt * 2.5);
+      currentSkyColor.lerp(linCol(bNow.sky), dt * 2.5);
+      currentFogColor.lerp(linCol(bNow.fog), dt * 2.5);
       skyUniforms.uTop.value.copy(currentSkyColor);
       skyUniforms.uHorizon.value.copy(currentFogColor);
+      skyUniforms.uBottom.value.copy(currentFogColor).multiplyScalar(0.5);
       scene.fog.color.copy(currentFogColor);
       renderer.setClearColor(currentSkyColor, 1);
 
