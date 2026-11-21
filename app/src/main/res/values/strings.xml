@@ -1,0 +1,14 @@
+<resources>
+    <string name="app_name">Wildcraft Tycoon</string>
+    <string name="cd_open_shop">Open Upgrade Shop</string>
+    <string name="cd_open_biomes">Open World Biomes</string>
+    <string name="cd_open_quests">Open Quests Board</string>
+    <string name="cd_open_advisor">Open Tycoon Advisor Chat</string>
+    <string name="cd_open_studio">Open Concept Art Studio</string>
+    <string name="cd_toggle_audio">Toggle Sound Effects</string>
+    <string name="cd_close_sheet">Close Sheet</string>
+    <string name="cd_send_message">Send Message</string>
+    <string name="cd_generated_concept">Generated Concept Artwork</string>
+    <string name="firebase_required_notice_chat">Firebase is not enabled, so Tycoon Advisor is showing clearly labeled sample responses. Enable Firebase AI Logic in AI Studio to connect live Gemini chat.</string>
+    <string name="firebase_required_notice_studio">Firebase is not enabled, so Concept Studio is showing a sample preview. Enable Firebase AI Logic in AI Studio to generate live 1K, 2K, and 4K images with Gemini.</string>
+</resources>

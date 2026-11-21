@@ -1,0 +1,6 @@
+{
+  "name": "Wildcraft Tycoon",
+  "description": "Portrait 3D resource-gathering and tycoon game with one-handed controls, six unlockable biomes, automated factories, Gemini strategy chat, and 1K-4K concept studio.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
