@@ -2,12 +2,15 @@ package com.example.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,19 +25,21 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.VolumeOff
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Backpack
-import androidx.compose.material.icons.filled.Brush
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.filled.Factory
 import androidx.compose.material.icons.filled.MonetizationOn
-import androidx.compose.material.icons.filled.ShoppingBag
+import androidx.compose.material.icons.filled.PrecisionManufacturing
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
@@ -52,6 +57,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -61,118 +67,206 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.R
+import com.example.data.BiomeType
+import com.example.data.ResourceType
 import com.example.data.TycoonSaveState
-import java.text.NumberFormat
-import java.util.Locale
+import com.example.ui.theme.AmberBright
+import com.example.ui.theme.AmberGold
+import com.example.ui.theme.CoralCrimson
+import com.example.ui.theme.CreamText
+import com.example.ui.theme.CrystalCyan
+import com.example.ui.theme.EmeraldCanopy
+import com.example.ui.theme.LichenMuted
+import com.example.ui.theme.ObsidianForest
+import com.example.ui.theme.PanelBorder
+import com.example.ui.theme.PanelCard
+import com.example.ui.theme.PanelDark
+import com.example.ui.theme.PanelElevated
 
 @Composable
 fun GameHudOverlay(
     state: TycoonSaveState,
+    activeBiome: BiomeType,
     offlineEarnings: Long?,
     onDismissOfflineBanner: () -> Unit,
-    onOpenShop: () -> Unit,
+    onOpenUpgrades: () -> Unit,
+    onOpenMachinery: () -> Unit,
+    onOpenMarket: () -> Unit,
+    onOpenBusiness: () -> Unit,
+    onOpenBackpack: () -> Unit,
     onOpenBiomes: () -> Unit,
     onOpenQuests: () -> Unit,
-    onOpenAdvisor: () -> Unit,
-    onOpenStudio: () -> Unit,
-    onToggleMute: () -> Unit,
+    onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val questList = remember(state) { state.evaluateQuests() }
     val readyCount = remember(questList) { questList.count { it.isReadyToClaim } }
+    val deliverableContracts = remember(state.activeContracts, state.warehouseStock, state.inventory) {
+        state.activeContracts.count { state.availableForTrade(it.goodId) >= it.quantity }
+    }
     val trackedQuest = remember(questList) {
         questList.firstOrNull { it.isReadyToClaim } ?: questList.firstOrNull { !it.isClaimed }
+    }
+    val heldResources = remember(state.inventory) {
+        state.inventory.entries
+            .filter { it.value > 0 }
+            .mapNotNull { (id, qty) -> ResourceType.fromId(id)?.let { it to qty } }
+            .sortedByDescending { it.second }
     }
 
     Box(
         modifier = modifier
             .fillMaxSize()
             .windowInsetsPadding(WindowInsets.safeDrawing)
-            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .padding(horizontal = 12.dp, vertical = 6.dp)
     ) {
+        // =====================================================================
+        // TOP SECTION: Money + Level/XP + Backpack + Organized Action Strip
+        // =====================================================================
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .align(Alignment.TopCenter),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Top Row: Money & Backpack pills
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
+                // Compact Currency + Player Level & XP Pill
+                val xpFraction = (state.xpIntoCurrentLevel.toFloat() / state.xpNeededForNextLevel.coerceAtLeast(1L))
+                    .coerceIn(0f, 1f)
+                val animatedXp by animateFloatAsState(
+                    targetValue = xpFraction,
+                    animationSpec = tween(350, easing = FastOutSlowInEasing),
+                    label = "hudXp"
+                )
+
                 Surface(
                     shape = RoundedCornerShape(18.dp),
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.86f),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
+                    color = PanelDark.copy(alpha = 0.86f),
+                    border = BorderStroke(
+                        1.dp,
+                        Brush.horizontalGradient(
+                            listOf(AmberGold.copy(alpha = 0.65f), PanelBorder.copy(alpha = 0.6f))
+                        )
+                    ),
                     tonalElevation = 4.dp,
                     modifier = Modifier.testTag("hud_money_pill")
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = Icons.Filled.MonetizationOn,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
+                        // Level Medallion
+                        Surface(
+                            shape = RoundedCornerShape(11.dp),
+                            color = AmberGold.copy(alpha = 0.18f),
+                            border = BorderStroke(1.dp, AmberGold.copy(alpha = 0.7f)),
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = "${state.playerLevel}",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = AmberBright,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
                         Column {
-                            Text(
-                                text = formatCompactCurrency(state.coins),
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                text = if (state.passiveIncomePerSecond > 0) {
-                                    "Lv.${state.playerLevel} • +$${state.passiveIncomePerSecond.toInt()}/s"
-                                } else {
-                                    "Pioneer Lv.${state.playerLevel}"
-                                },
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.secondary
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Filled.MonetizationOn,
+                                    contentDescription = null,
+                                    tint = AmberBright,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                AnimatedCurrencyText(
+                                    coins = state.coins,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = CreamText
+                                )
+                                if (state.passiveIncomePerSecond > 0) {
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "+$${state.passiveIncomePerSecond.toInt()}/s",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = EmeraldCanopy,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(3.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "LV.${state.playerLevel}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = CrystalCyan,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                LinearProgressIndicator(
+                                    progress = { animatedXp },
+                                    modifier = Modifier
+                                        .width(64.dp)
+                                        .height(4.dp)
+                                        .clip(CircleShape),
+                                    color = CrystalCyan,
+                                    trackColor = PanelElevated,
+                                    strokeCap = StrokeCap.Round
+                                )
+                            }
                         }
                     }
                 }
 
+                // Compact Backpack Capacity Pill (tappable -> Backpack & Inventory)
                 val fillFraction = (state.backpackUsed.toFloat() / state.backpackMaxCapacity.coerceAtLeast(1))
                     .coerceIn(0f, 1f)
-                val animatedFill by animateFloatAsState(targetValue = fillFraction, label = "bagFill")
+                val animatedFill by animateFloatAsState(
+                    targetValue = fillFraction,
+                    animationSpec = tween(250),
+                    label = "bagFill"
+                )
                 val bagColor by animateColorAsState(
-                    targetValue = if (state.isBackpackFull) {
-                        MaterialTheme.colorScheme.error
-                    } else {
-                        MaterialTheme.colorScheme.secondary
+                    targetValue = when {
+                        state.isBackpackFull -> CoralCrimson
+                        fillFraction >= 0.8f -> AmberGold
+                        else -> EmeraldCanopy
                     },
                     label = "bagColor"
                 )
 
                 Surface(
                     shape = RoundedCornerShape(18.dp),
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.86f),
+                    color = PanelDark.copy(alpha = 0.86f),
                     border = BorderStroke(
                         1.dp,
-                        if (state.isBackpackFull) MaterialTheme.colorScheme.error
-                        else MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)
+                        if (state.isBackpackFull) CoralCrimson.copy(alpha = 0.9f)
+                        else PanelBorder.copy(alpha = 0.85f)
                     ),
                     tonalElevation = 4.dp,
-                    modifier = Modifier.testTag("hud_backpack_pill")
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(18.dp))
+                        .clickable(onClick = onOpenBackpack)
+                        .testTag("hud_backpack_pill")
                 ) {
                     Column(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
+                        modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
+                        horizontalAlignment = Alignment.End
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 imageVector = Icons.Filled.Backpack,
-                                contentDescription = null,
+                                contentDescription = stringResource(R.string.cd_open_backpack),
                                 tint = bagColor,
-                                modifier = Modifier.size(18.dp)
+                                modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(5.dp))
                             Text(
@@ -182,133 +276,141 @@ fun GameHudOverlay(
                                     "${state.backpackUsed}/${state.backpackMaxCapacity}"
                                 },
                                 style = MaterialTheme.typography.labelLarge,
-                                color = if (state.isBackpackFull) {
-                                    MaterialTheme.colorScheme.error
-                                } else {
-                                    MaterialTheme.colorScheme.onSurface
-                                },
+                                color = if (state.isBackpackFull) CoralCrimson else CreamText,
                                 maxLines = 1
                             )
                         }
                         Spacer(modifier = Modifier.height(4.dp))
-                        LinearProgressIndicator(
-                            progress = { animatedFill },
-                            modifier = Modifier
-                                .width(78.dp)
-                                .height(4.dp)
-                                .clip(CircleShape),
-                            color = bagColor,
-                            trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                            strokeCap = StrokeCap.Round
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            if (heldResources.isNotEmpty()) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    heldResources.take(3).forEach { (res, _) ->
+                                        Box(
+                                            modifier = Modifier
+                                                .size(6.dp)
+                                                .clip(CircleShape)
+                                                .background(Color(res.colorHex))
+                                        )
+                                    }
+                                }
+                            }
+                            LinearProgressIndicator(
+                                progress = { animatedFill },
+                                modifier = Modifier
+                                    .width(if (heldResources.isNotEmpty()) 56.dp else 76.dp)
+                                    .height(4.dp)
+                                    .clip(CircleShape),
+                                color = bagColor,
+                                trackColor = PanelElevated,
+                                strokeCap = StrokeCap.Round
+                            )
+                        }
                     }
                 }
             }
 
-            // Second Compact Row: Top-bar Icon Buttons (Shop, Biomes, Quests, Advisor, Studio, Mute)
+            // Second Compact Row: Active Region Pill (Left) + Organized Menu Icons (Right)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                val biomeAccent = Color(activeBiome.accentHex)
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = PanelDark.copy(alpha = 0.82f),
+                    border = BorderStroke(1.dp, biomeAccent.copy(alpha = 0.5f)),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(14.dp))
+                        .clickable(onClick = onOpenBiomes)
+                        .testTag("btn_open_biomes")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Explore,
+                            contentDescription = stringResource(R.string.cd_open_biomes),
+                            tint = biomeAccent,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = activeBiome.title,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = CreamText,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+
+                // Small Organized Icons: Upgrades, Business/Shop, Quests, Settings
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    HudSquircleButton(
+                        icon = Icons.Filled.Build,
+                        contentDescription = stringResource(R.string.cd_open_shop),
+                        accent = AmberGold,
+                        testTag = "btn_open_shop",
+                        onClick = onOpenUpgrades
+                    )
+                    HudSquircleButton(
+                        icon = Icons.Filled.Factory,
+                        contentDescription = stringResource(R.string.cd_open_business),
+                        accent = EmeraldCanopy,
+                        testTag = "btn_open_business",
+                        onClick = onOpenBusiness
+                    )
+                    HudSquircleButton(
+                        icon = Icons.Filled.EmojiEvents,
+                        contentDescription = stringResource(R.string.cd_open_quests),
+                        accent = AmberBright,
+                        badgeCount = readyCount,
+                        testTag = "btn_open_quests",
+                        onClick = onOpenQuests
+                    )
+                    HudSquircleButton(
+                        icon = Icons.Filled.Settings,
+                        contentDescription = stringResource(R.string.cd_open_settings),
+                        accent = LichenMuted,
+                        testTag = "btn_open_settings",
+                        onClick = onOpenSettings
+                    )
+                }
+            }
+
+            // Secondary Compact Right Edge Cluster: Machinery & Buyers Market
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                    HudIconButton(
-                        icon = Icons.Filled.ShoppingBag,
-                        contentDescription = stringResource(R.string.cd_open_shop),
-                        tint = MaterialTheme.colorScheme.primary,
-                        testTag = "btn_open_shop",
-                        onClick = onOpenShop
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    HudSquircleButton(
+                        icon = Icons.Filled.PrecisionManufacturing,
+                        contentDescription = stringResource(R.string.cd_open_machinery),
+                        accent = CrystalCyan,
+                        testTag = "btn_open_machinery",
+                        onClick = onOpenMachinery
                     )
-                    HudIconButton(
-                        icon = Icons.Filled.Explore,
-                        contentDescription = stringResource(R.string.cd_open_biomes),
-                        tint = MaterialTheme.colorScheme.secondary,
-                        testTag = "btn_open_biomes",
-                        onClick = onOpenBiomes
+                    HudSquircleButton(
+                        icon = Icons.Filled.Storefront,
+                        contentDescription = stringResource(R.string.cd_open_market),
+                        accent = AmberBright,
+                        badgeCount = deliverableContracts,
+                        testTag = "btn_open_market",
+                        onClick = onOpenMarket
                     )
-                    HudIconButton(
-                        icon = Icons.Filled.EmojiEvents,
-                        contentDescription = stringResource(R.string.cd_open_quests),
-                        tint = MaterialTheme.colorScheme.primary,
-                        badgeCount = readyCount,
-                        testTag = "btn_open_quests",
-                        onClick = onOpenQuests
-                    )
-                    HudIconButton(
-                        icon = Icons.Filled.AutoAwesome,
-                        contentDescription = stringResource(R.string.cd_open_advisor),
-                        tint = MaterialTheme.colorScheme.tertiary,
-                        testTag = "btn_open_advisor",
-                        onClick = onOpenAdvisor
-                    )
-                    HudIconButton(
-                        icon = Icons.Filled.Brush,
-                        contentDescription = stringResource(R.string.cd_open_studio),
-                        tint = MaterialTheme.colorScheme.tertiary,
-                        testTag = "btn_open_studio",
-                        onClick = onOpenStudio
-                    )
-                    HudIconButton(
-                        icon = if (state.isMuted) Icons.AutoMirrored.Filled.VolumeOff
-                        else Icons.AutoMirrored.Filled.VolumeUp,
-                        contentDescription = stringResource(R.string.cd_toggle_audio),
-                        tint = if (state.isMuted) MaterialTheme.colorScheme.onSurfaceVariant
-                        else MaterialTheme.colorScheme.onSurface,
-                        testTag = "btn_toggle_mute",
-                        onClick = onToggleMute
-                    )
-                }
-            }
-
-            // Compact Active Quest Tracker Pill (top-right, non-intrusive)
-            if (trackedQuest != null) {
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    Surface(
-                        shape = RoundedCornerShape(14.dp),
-                        color = if (trackedQuest.isReadyToClaim) {
-                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.92f)
-                        } else {
-                            MaterialTheme.colorScheme.surface.copy(alpha = 0.82f)
-                        },
-                        border = BorderStroke(
-                            1.dp,
-                            if (trackedQuest.isReadyToClaim) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
-                        ),
-                        modifier = Modifier
-                            .align(Alignment.CenterEnd)
-                            .clip(RoundedCornerShape(14.dp))
-                            .clickable(onClick = onOpenQuests)
-                            .testTag("hud_quest_tracker")
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.EmojiEvents,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(15.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = if (trackedQuest.isReadyToClaim) {
-                                    "Claim: ${trackedQuest.quest.title}"
-                                } else {
-                                    "${trackedQuest.quest.title} (${trackedQuest.current}/${trackedQuest.target})"
-                                },
-                                style = MaterialTheme.typography.labelMedium,
-                                color = if (trackedQuest.isReadyToClaim) {
-                                    MaterialTheme.colorScheme.onPrimaryContainer
-                                } else {
-                                    MaterialTheme.colorScheme.onSurface
-                                },
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
                 }
             }
 
@@ -320,8 +422,8 @@ fun GameHudOverlay(
             ) {
                 Surface(
                     shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.94f),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary),
+                    color = PanelDark.copy(alpha = 0.94f),
+                    border = BorderStroke(1.dp, EmeraldCanopy.copy(alpha = 0.7f)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -333,12 +435,12 @@ fun GameHudOverlay(
                             Text(
                                 text = "Welcome Back!",
                                 style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                                color = EmeraldCanopy
                             )
                             Text(
-                                text = "Auto-miners earned ${formatCompactCurrency(offlineEarnings ?: 0L)} while you were away.",
+                                text = "Auto-miners earned ${formatCompactCurrency(offlineEarnings ?: 0L)} while away.",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                                color = CreamText
                             )
                         }
                         TextButton(
@@ -346,9 +448,139 @@ fun GameHudOverlay(
                             modifier = Modifier.minimumInteractiveComponentSize()
                         ) {
                             Text(
-                                text = "Nice!",
+                                text = "Collect",
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                                color = AmberBright
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // =====================================================================
+        // BOTTOM-RIGHT: Minimal Progress & Backpack Info (Bottom-Left is Joystick)
+        // =====================================================================
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(bottom = 10.dp)
+                .widthIn(max = 196.dp),
+            horizontalAlignment = Alignment.End,
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            if (heldResources.isNotEmpty() || state.isBackpackFull) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = PanelDark.copy(alpha = 0.84f),
+                    border = BorderStroke(
+                        1.dp,
+                        if (state.isBackpackFull) CoralCrimson.copy(alpha = 0.8f)
+                        else PanelBorder.copy(alpha = 0.7f)
+                    ),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(16.dp))
+                        .clickable(onClick = onOpenBackpack)
+                        .testTag("bottom_backpack_strip")
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        horizontalAlignment = Alignment.End
+                    ) {
+                        if (state.isBackpackFull) {
+                            Text(
+                                text = "Bag Full — Visit Market",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = CoralCrimson,
+                                fontWeight = FontWeight.Bold
+                            )
+                        } else {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                heldResources.take(3).forEach { (res, qty) ->
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(7.dp)
+                                                .clip(CircleShape)
+                                                .background(Color(res.colorHex))
+                                        )
+                                        Spacer(modifier = Modifier.width(3.dp))
+                                        Text(
+                                            text = "$qty",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = CreamText,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (trackedQuest != null) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = if (trackedQuest.isReadyToClaim) {
+                        PanelCard.copy(alpha = 0.94f)
+                    } else {
+                        PanelDark.copy(alpha = 0.82f)
+                    },
+                    border = BorderStroke(
+                        1.dp,
+                        if (trackedQuest.isReadyToClaim) AmberGold.copy(alpha = 0.85f)
+                        else PanelBorder.copy(alpha = 0.65f)
+                    ),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(16.dp))
+                        .clickable(onClick = onOpenQuests)
+                        .testTag("hud_quest_tracker")
+                ) {
+                    Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = if (trackedQuest.isReadyToClaim) Icons.Filled.Star else Icons.Filled.EmojiEvents,
+                                contentDescription = null,
+                                tint = if (trackedQuest.isReadyToClaim) AmberBright else AmberGold,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(5.dp))
+                            Text(
+                                text = if (trackedQuest.isReadyToClaim) {
+                                    "Claim: ${trackedQuest.quest.title}"
+                                } else {
+                                    trackedQuest.quest.title
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (trackedQuest.isReadyToClaim) AmberBright else CreamText,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            LinearProgressIndicator(
+                                progress = { trackedQuest.fraction },
+                                modifier = Modifier
+                                    .width(86.dp)
+                                    .height(3.5.dp)
+                                    .clip(CircleShape),
+                                color = if (trackedQuest.isReadyToClaim) EmeraldCanopy else AmberGold,
+                                trackColor = PanelElevated,
+                                strokeCap = StrokeCap.Round
+                            )
+                            Text(
+                                text = "${trackedQuest.current}/${trackedQuest.target}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = LichenMuted
                             )
                         }
                     }
@@ -359,25 +591,25 @@ fun GameHudOverlay(
 }
 
 @Composable
-private fun HudIconButton(
+private fun HudSquircleButton(
     icon: ImageVector,
     contentDescription: String,
-    tint: Color,
+    accent: Color,
     badgeCount: Int = 0,
     testTag: String,
     onClick: () -> Unit
 ) {
     Surface(
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.86f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)),
+        shape = RoundedCornerShape(14.dp),
+        color = PanelDark.copy(alpha = 0.86f),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.35f)),
         tonalElevation = 4.dp
     ) {
         IconButton(
             onClick = onClick,
-            colors = IconButtonDefaults.iconButtonColors(contentColor = tint),
+            colors = IconButtonDefaults.iconButtonColors(contentColor = accent),
             modifier = Modifier
-                .size(48.dp)
+                .size(44.dp)
                 .minimumInteractiveComponentSize()
                 .testTag(testTag)
         ) {
@@ -385,8 +617,8 @@ private fun HudIconButton(
                 BadgedBox(
                     badge = {
                         Badge(
-                            containerColor = MaterialTheme.colorScheme.error,
-                            contentColor = MaterialTheme.colorScheme.onError
+                            containerColor = CoralCrimson,
+                            contentColor = CreamText
                         ) {
                             Text("$badgeCount")
                         }
@@ -395,24 +627,16 @@ private fun HudIconButton(
                     Icon(
                         imageVector = icon,
                         contentDescription = contentDescription,
-                        modifier = Modifier.size(22.dp)
+                        modifier = Modifier.size(20.dp)
                     )
                 }
             } else {
                 Icon(
                     imageVector = icon,
                     contentDescription = contentDescription,
-                    modifier = Modifier.size(22.dp)
+                    modifier = Modifier.size(20.dp)
                 )
             }
         }
-    }
-}
-
-fun formatCompactCurrency(amount: Long): String {
-    return when {
-        amount >= 1_000_000L -> String.format(Locale.US, "$%.2fM", amount / 1_000_000.0)
-        amount >= 100_000L -> String.format(Locale.US, "$%.1fK", amount / 1_000.0)
-        else -> "$" + NumberFormat.getNumberInstance(Locale.US).format(amount)
     }
 }

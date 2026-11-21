@@ -1,5 +1,6 @@
 package com.example.data
 
+import java.util.Locale
 import kotlin.math.pow
 import kotlin.math.roundToLong
 
@@ -23,62 +24,343 @@ enum class ResourceType(
     }
 }
 
+data class UpgradeStatMetric(
+    val label: String,
+    val currentText: String,
+    val nextText: String?,
+    val improvementPct: Int
+)
+
+data class ResourceRequirement(
+    val resource: ResourceType,
+    val requiredTotal: Int
+)
+
 enum class UpgradeType(
     val id: String,
     val title: String,
     val subtitle: String,
-    val maxLevel: Int = 6
+    val maxLevel: Int = 8
 ) {
-    AXE("axe", "Felling Axe", "Chops trees faster & yields more timber"),
-    PICKAXE("pickaxe", "Mining Pickaxe", "Breaks tougher ores & crystals"),
-    BACKPACK("backpack", "Cargo Backpack", "Expands resource carry capacity"),
-    MOVE_SPEED("moveSpeed", "Swift Boots", "Increases frontier movement speed"),
-    GATHER_SPEED("gatherSpeed", "Haste Gloves", "Increases automatic swing cadence");
+    AXE("axe", "Felling Axe", "Chopping damage, swing speed & timber yield"),
+    PICKAXE("pickaxe", "Mining Pickaxe", "Mining power, strike speed & rare ore extraction"),
+    BACKPACK("backpack", "Cargo Backpack", "Carrying capacity & resource haul efficiency"),
+    MOVE_SPEED("moveSpeed", "Explorer Stride", "Walking speed & trail XP bonus"),
+    GATHER_SPEED("gatherSpeed", "Harvester Gloves", "Automatic gathering cadence & efficiency");
+
+    fun materialTierLabel(level: Int): String = when (level.coerceIn(1, 8)) {
+        1 -> "Wooden"
+        2 -> "Stone"
+        3 -> "Copper"
+        4 -> "Iron"
+        5 -> "Steel"
+        6 -> "Gold"
+        7 -> "Diamond"
+        else -> "Legendary"
+    }
 
     fun tierName(level: Int): String = when (this) {
-        AXE, PICKAXE -> when (level.coerceIn(1, 6)) {
-            1 -> "Primitive Timber"
-            2 -> "Forged Iron"
-            3 -> "Copper-Steel"
-            4 -> "Gilded Gold"
-            5 -> "Prism Crystal"
-            else -> "Mythic Reactor"
+        AXE -> when (level.coerceIn(1, 8)) {
+            1 -> "Wooden Hatchet"
+            2 -> "Stone Cleaver"
+            3 -> "Copper Broadaxe"
+            4 -> "Iron Felling Axe"
+            5 -> "Tempered Steel Axe"
+            6 -> "Golden Timber Splitter"
+            7 -> "Diamond Twin-Bit"
+            else -> "Legendary Astral Cleaver"
         }
-        BACKPACK -> when (level.coerceIn(1, 6)) {
-            1 -> "Burlap Sack"
-            2 -> "Explorer Pack"
-            3 -> "Iron Frame"
-            4 -> "Brass Twin-Pack"
-            5 -> "Gold Hopper"
-            else -> "Quantum Core"
+        PICKAXE -> when (level.coerceIn(1, 8)) {
+            1 -> "Wooden Mallet-Pick"
+            2 -> "Stone Quarry Pick"
+            3 -> "Copper Prospector"
+            4 -> "Iron Striker Pick"
+            5 -> "Tempered Steel Pick"
+            6 -> "Golden Drill-Pick"
+            7 -> "Diamond Prism Pick"
+            else -> "Legendary Void Bore"
         }
-        MOVE_SPEED -> when (level.coerceIn(1, 6)) {
-            1 -> "Cloth Sandals"
-            2 -> "Trail Boots"
-            3 -> "Sprinter Greaves"
-            4 -> "Jet Striders"
-            5 -> "Turbo Thrusters"
-            else -> "Hyper Stride"
+        BACKPACK -> when (level.coerceIn(1, 8)) {
+            1 -> "Wooden Frame Sack"
+            2 -> "Stone-Trimmed Pack"
+            3 -> "Copper Carrier Rig"
+            4 -> "Iron Frame Backpack"
+            5 -> "Steel Expedition Pack"
+            6 -> "Golden Twin-Hopper"
+            7 -> "Diamond Vault Pack"
+            else -> "Legendary Quantum Core"
         }
-        GATHER_SPEED -> when (level.coerceIn(1, 6)) {
-            1 -> "Bare Hands"
-            2 -> "Leather Wraps"
-            3 -> "Power Grips"
-            4 -> "Servo Gauntlets"
-            5 -> "Plasma Cuffs"
-            else -> "Overdrive Arms"
+        MOVE_SPEED -> when (level.coerceIn(1, 8)) {
+            1 -> "Wooden Clogs"
+            2 -> "Stone-Soled Boots"
+            3 -> "Copper Trail Runners"
+            4 -> "Iron Greaves"
+            5 -> "Steel Striders"
+            6 -> "Golden Wingboots"
+            7 -> "Diamond Thrusters"
+            else -> "Legendary Hyper Stride"
         }
+        GATHER_SPEED -> when (level.coerceIn(1, 8)) {
+            1 -> "Wooden Grip Wraps"
+            2 -> "Stone Knuckle Grips"
+            3 -> "Copper Reflex Bracers"
+            4 -> "Iron Power Gauntlets"
+            5 -> "Steel Servo Gloves"
+            6 -> "Golden Haste Cuffs"
+            7 -> "Diamond Pulse Arms"
+            else -> "Legendary Overdrive"
+        }
+    }
+
+    fun categoryLabel(): String = when (this) {
+        AXE -> "Axe"
+        PICKAXE -> "Pickaxe"
+        BACKPACK -> "Backpack"
+        MOVE_SPEED, GATHER_SPEED -> "Character"
     }
 
     fun costForNextLevel(currentLevel: Int): Long {
         if (currentLevel >= maxLevel) return 0L
         return when (this) {
-            AXE, PICKAXE -> (50.0 * 2.4.pow(currentLevel - 1)).roundToLong()
-            BACKPACK -> (40.0 * 2.5.pow(currentLevel - 1)).roundToLong()
-            MOVE_SPEED -> (45.0 * 2.45.pow(currentLevel - 1)).roundToLong()
-            GATHER_SPEED -> (60.0 * 2.4.pow(currentLevel - 1)).roundToLong()
+            AXE, PICKAXE -> (50.0 * 2.35.pow(currentLevel - 1)).roundToLong()
+            BACKPACK -> (40.0 * 2.4.pow(currentLevel - 1)).roundToLong()
+            MOVE_SPEED -> (45.0 * 2.35.pow(currentLevel - 1)).roundToLong()
+            GATHER_SPEED -> (60.0 * 2.35.pow(currentLevel - 1)).roundToLong()
         }
     }
+
+    fun resourceRequirementForNext(currentLevel: Int): ResourceRequirement? {
+        val next = currentLevel + 1
+        if (next > maxLevel) return null
+        return when (this) {
+            AXE -> when (next) {
+                2 -> ResourceRequirement(ResourceType.WOOD, 8)
+                3 -> ResourceRequirement(ResourceType.STONE, 10)
+                4 -> ResourceRequirement(ResourceType.COPPER, 12)
+                5 -> ResourceRequirement(ResourceType.IRON, 18)
+                6 -> ResourceRequirement(ResourceType.GOLD, 18)
+                7 -> ResourceRequirement(ResourceType.CRYSTAL, 20)
+                8 -> ResourceRequirement(ResourceType.RARE, 14)
+                else -> null
+            }
+            PICKAXE -> when (next) {
+                2 -> ResourceRequirement(ResourceType.STONE, 8)
+                3 -> ResourceRequirement(ResourceType.COAL, 10)
+                4 -> ResourceRequirement(ResourceType.COPPER, 14)
+                5 -> ResourceRequirement(ResourceType.IRON, 20)
+                6 -> ResourceRequirement(ResourceType.GOLD, 20)
+                7 -> ResourceRequirement(ResourceType.CRYSTAL, 22)
+                8 -> ResourceRequirement(ResourceType.RARE, 16)
+                else -> null
+            }
+            BACKPACK -> when (next) {
+                2 -> ResourceRequirement(ResourceType.WOOD, 10)
+                3 -> ResourceRequirement(ResourceType.STONE, 14)
+                4 -> ResourceRequirement(ResourceType.COPPER, 12)
+                5 -> ResourceRequirement(ResourceType.IRON, 16)
+                6 -> ResourceRequirement(ResourceType.GOLD, 15)
+                7 -> ResourceRequirement(ResourceType.CRYSTAL, 18)
+                8 -> ResourceRequirement(ResourceType.RARE, 12)
+                else -> null
+            }
+            MOVE_SPEED, GATHER_SPEED -> when (next) {
+                2 -> ResourceRequirement(ResourceType.WOOD, 8)
+                3 -> ResourceRequirement(ResourceType.STONE, 12)
+                4 -> ResourceRequirement(ResourceType.COAL, 12)
+                5 -> ResourceRequirement(ResourceType.IRON, 15)
+                6 -> ResourceRequirement(ResourceType.GOLD, 16)
+                7 -> ResourceRequirement(ResourceType.CRYSTAL, 18)
+                8 -> ResourceRequirement(ResourceType.RARE, 12)
+                else -> null
+            }
+        }
+    }
+
+    fun statComparisonLines(level: Int): List<UpgradeStatMetric> {
+        val cur = level.coerceIn(1, maxLevel)
+        val nxt = (cur + 1).coerceAtMost(maxLevel)
+        val isMax = cur >= maxLevel
+        return when (this) {
+            AXE -> {
+                val damages = listOf(1, 2, 3, 5, 7, 9, 12, 16)
+                val curDmg = damages[cur - 1]
+                val nxtDmg = damages[nxt - 1]
+                val curSpd = 1.0 + (cur - 1) * 0.24
+                val nxtSpd = 1.0 + (nxt - 1) * 0.24
+                val curWood = 1 + (cur - 1) / 2
+                val nxtWood = 1 + (nxt - 1) / 2
+                listOf(
+                    UpgradeStatMetric("Chop Damage", "$curDmg", if (isMax) null else "$nxtDmg", pctDelta(curDmg.toDouble(), nxtDmg.toDouble())),
+                    UpgradeStatMetric("Attack Speed", "${String.format(Locale.US, "%.2f", curSpd)}x", if (isMax) null else "${String.format(Locale.US, "%.2f", nxtSpd)}x", pctDelta(curSpd, nxtSpd)),
+                    UpgradeStatMetric("Wood Yield", "$curWood/tree", if (isMax) null else "$nxtWood/tree", pctDelta(curWood.toDouble(), nxtWood.toDouble()))
+                )
+            }
+            PICKAXE -> {
+                val damages = listOf(1, 2, 3, 5, 7, 9, 12, 16)
+                val curDmg = damages[cur - 1]
+                val nxtDmg = damages[nxt - 1]
+                val curSpd = 1.0 + (cur - 1) * 0.24
+                val nxtSpd = 1.0 + (nxt - 1) * 0.24
+                val curRare = (cur - 1) * 15
+                val nxtRare = (nxt - 1) * 15
+                listOf(
+                    UpgradeStatMetric("Mining Power", "$curDmg", if (isMax) null else "$nxtDmg", pctDelta(curDmg.toDouble(), nxtDmg.toDouble())),
+                    UpgradeStatMetric("Mining Speed", "${String.format(Locale.US, "%.2f", curSpd)}x", if (isMax) null else "${String.format(Locale.US, "%.2f", nxtSpd)}x", pctDelta(curSpd, nxtSpd)),
+                    UpgradeStatMetric("Rare Ore Yield", "+$curRare%", if (isMax) null else "+$nxtRare%", if (isMax) 0 else 15)
+                )
+            }
+            BACKPACK -> {
+                val caps = listOf(12, 22, 36, 56, 84, 126, 184, 260)
+                val curCap = caps[cur - 1]
+                val nxtCap = caps[nxt - 1]
+                val curEff = 100 + (cur - 1) * 10
+                val nxtEff = 100 + (nxt - 1) * 10
+                listOf(
+                    UpgradeStatMetric("Carry Capacity", "$curCap", if (isMax) null else "$nxtCap", pctDelta(curCap.toDouble(), nxtCap.toDouble())),
+                    UpgradeStatMetric("Haul Efficiency", "$curEff%", if (isMax) null else "$nxtEff%", pctDelta(curEff.toDouble(), nxtEff.toDouble()))
+                )
+            }
+            MOVE_SPEED -> {
+                val speeds = listOf(6.4, 7.4, 8.5, 9.7, 11.0, 12.4, 13.9, 15.6)
+                val curSpd = speeds[cur - 1]
+                val nxtSpd = speeds[nxt - 1]
+                val curXp = 100 + (cur - 1) * 10
+                val nxtXp = 100 + (nxt - 1) * 10
+                listOf(
+                    UpgradeStatMetric("Walk Speed", "${String.format(Locale.US, "%.1f", curSpd)} m/s", if (isMax) null else "${String.format(Locale.US, "%.1f", nxtSpd)} m/s", pctDelta(curSpd, nxtSpd)),
+                    UpgradeStatMetric("XP Gain Bonus", "$curXp%", if (isMax) null else "$nxtXp%", pctDelta(curXp.toDouble(), nxtXp.toDouble()))
+                )
+            }
+            GATHER_SPEED -> {
+                val rates = listOf(1.0, 1.25, 1.55, 1.9, 2.3, 2.75, 3.25, 3.85)
+                val curR = rates[cur - 1]
+                val nxtR = rates[nxt - 1]
+                val curEff = 100 + (cur - 1) * 15
+                val nxtEff = 100 + (nxt - 1) * 15
+                listOf(
+                    UpgradeStatMetric("Gather Speed", "${String.format(Locale.US, "%.2f", curR)}x", if (isMax) null else "${String.format(Locale.US, "%.2f", nxtR)}x", pctDelta(curR, nxtR)),
+                    UpgradeStatMetric("Gather Efficiency", "$curEff%", if (isMax) null else "$nxtEff%", pctDelta(curEff.toDouble(), nxtEff.toDouble()))
+                )
+            }
+        }
+    }
+}
+
+enum class ResourceUpgradeType(
+    val id: String,
+    val title: String,
+    val subtitle: String,
+    val accentHex: Long,
+    val maxLevel: Int = 8
+) {
+    TRADE_VALUE(
+        id = "tradeValue",
+        title = "Market Valuation",
+        subtitle = "Boosts selling price for all gathered resources",
+        accentHex = 0xFFFBBF24
+    ),
+    GATHER_EFFICIENCY(
+        id = "gatherEfficiency",
+        title = "Harvest Mastery",
+        subtitle = "Increases bonus yield chance on every felled node",
+        accentHex = 0xFF34D399
+    ),
+    RARE_DISCOVERY(
+        id = "rareDiscovery",
+        title = "Prospecting Luck",
+        subtitle = "Increases chance to extract bonus rare ores & relics",
+        accentHex = 0xFFE879F9
+    ),
+    STORAGE_CAPACITY(
+        id = "storageCapacity",
+        title = "Logistics Storage",
+        subtitle = "Expands carry capacity & warehouse buffer slots",
+        accentHex = 0xFF38BDF8
+    ),
+    AUTO_PRODUCTION(
+        id = "autoProduction",
+        title = "Automation Overclock",
+        subtitle = "Accelerates factory & auto-miner production speed",
+        accentHex = 0xFFFB923C
+    );
+
+    fun costForNextLevel(currentLevel: Int): Long {
+        if (currentLevel >= maxLevel) return 0L
+        val base = when (this) {
+            TRADE_VALUE -> 85.0
+            GATHER_EFFICIENCY -> 75.0
+            RARE_DISCOVERY -> 110.0
+            STORAGE_CAPACITY -> 70.0
+            AUTO_PRODUCTION -> 140.0
+        }
+        return (base * 2.25.pow(currentLevel - 1)).roundToLong()
+    }
+
+    fun resourceRequirementForNext(currentLevel: Int): ResourceRequirement? {
+        val next = currentLevel + 1
+        if (next > maxLevel) return null
+        return when (next) {
+            2 -> ResourceRequirement(ResourceType.WOOD, 12)
+            3 -> ResourceRequirement(ResourceType.STONE, 16)
+            4 -> ResourceRequirement(ResourceType.COAL, 14)
+            5 -> ResourceRequirement(ResourceType.IRON, 18)
+            6 -> ResourceRequirement(ResourceType.GOLD, 18)
+            7 -> ResourceRequirement(ResourceType.CRYSTAL, 20)
+            8 -> ResourceRequirement(ResourceType.RARE, 14)
+            else -> null
+        }
+    }
+
+    fun statComparisonLines(level: Int): List<UpgradeStatMetric> {
+        val cur = level.coerceIn(1, maxLevel)
+        val nxt = (cur + 1).coerceAtMost(maxLevel)
+        val isMax = cur >= maxLevel
+        return when (this) {
+            TRADE_VALUE -> {
+                val curPct = 100 + (cur - 1) * 15
+                val nxtPct = 100 + (nxt - 1) * 15
+                listOf(
+                    UpgradeStatMetric("Sell Multiplier", "$curPct%", if (isMax) null else "$nxtPct%", pctDelta(curPct.toDouble(), nxtPct.toDouble()))
+                )
+            }
+            GATHER_EFFICIENCY -> {
+                val curBonus = (cur - 1) * 12
+                val nxtBonus = (nxt - 1) * 12
+                listOf(
+                    UpgradeStatMetric("Bonus Drop Chance", "+$curBonus%", if (isMax) null else "+$nxtBonus%", if (isMax) 0 else 12)
+                )
+            }
+            RARE_DISCOVERY -> {
+                val curLuck = (cur - 1) * 8
+                val nxtLuck = (nxt - 1) * 8
+                listOf(
+                    UpgradeStatMetric("Rare Find Chance", "+$curLuck%", if (isMax) null else "+$nxtLuck%", if (isMax) 0 else 8)
+                )
+            }
+            STORAGE_CAPACITY -> {
+                val curSlots = (cur - 1) * 6
+                val nxtSlots = (nxt - 1) * 6
+                val curPct = 100 + (cur - 1) * 10
+                val nxtPct = 100 + (nxt - 1) * 10
+                listOf(
+                    UpgradeStatMetric("Bonus Bag Slots", "+$curSlots", if (isMax) null else "+$nxtSlots", if (isMax) 0 else 15),
+                    UpgradeStatMetric("Depot Multiplier", "$curPct%", if (isMax) null else "$nxtPct%", pctDelta(curPct.toDouble(), nxtPct.toDouble()))
+                )
+            }
+            AUTO_PRODUCTION -> {
+                val curSpd = 100 + (cur - 1) * 20
+                val nxtSpd = 100 + (nxt - 1) * 20
+                listOf(
+                    UpgradeStatMetric("Factory Output", "$curSpd%", if (isMax) null else "$nxtSpd%", pctDelta(curSpd.toDouble(), nxtSpd.toDouble()))
+                )
+            }
+        }
+    }
+}
+
+private fun pctDelta(cur: Double, nxt: Double): Int {
+    if (cur <= 0.0 || nxt <= cur) return 0
+    return (((nxt - cur) / cur) * 100.0).roundToLong().toInt()
 }
 
 enum class BuildingType(
@@ -89,93 +371,105 @@ enum class BuildingType(
     val baseCost: Double,
     val costGrowth: Double,
     val passivePerLevel: Double,
-    val maxLevel: Int = 5
+    val maxLevel: Int = 8,
+    val maxWorkers: Int = 4,
+    val maxLines: Int = 3
 ) {
     SAWMILL(
         id = "sawmill",
         title = "Timber Sawmill",
-        description = "+45% Wood value & +$4/s per level",
+        description = "+45% Wood value, faster plank lines & +$4/s per tier",
         biomeId = "forest",
         baseCost = 120.0,
-        costGrowth = 2.3,
+        costGrowth = 2.25,
         passivePerLevel = 4.0
     ),
     WAREHOUSE(
         id = "warehouse",
-        title = "Trading Warehouse",
-        description = "+20% all sell prices & +8 bag capacity/lvl",
+        title = "Grand Warehouse",
+        description = "+20% all sell prices & +8 storage capacity per tier",
         biomeId = "forest",
         baseCost = 180.0,
-        costGrowth = 2.4,
+        costGrowth = 2.3,
         passivePerLevel = 2.0
     ),
     SMELTER(
         id = "smelter",
         title = "Ore Smelter",
-        description = "+45% mineral/ore value & +$10/s per level",
+        description = "+45% mineral/ore value & +$10/s per tier",
         biomeId = "mountains",
         baseCost = 320.0,
-        costGrowth = 2.4,
+        costGrowth = 2.3,
         passivePerLevel = 10.0
     ),
     MINER_FOREST(
         id = "miner_forest",
         title = "Forest Lumber Bot",
-        description = "Automated timber collector (+$3/s per level)",
+        description = "Automated timber collector (+$3/s base per tier)",
         biomeId = "forest",
         baseCost = 90.0,
-        costGrowth = 2.2,
+        costGrowth = 2.15,
         passivePerLevel = 3.0
     ),
     MINER_MOUNTAINS(
         id = "miner_mountains",
         title = "Mountain Drill Rig",
-        description = "Automated iron & coal drill (+$12/s per level)",
+        description = "Automated iron & coal drill (+$12/s base per tier)",
         biomeId = "mountains",
         baseCost = 350.0,
-        costGrowth = 2.2,
+        costGrowth = 2.15,
         passivePerLevel = 12.0
     ),
     MINER_DESERT(
         id = "miner_desert",
         title = "Solar Ore Extractor",
-        description = "Automated copper & gold rig (+$30/s per level)",
+        description = "Automated copper & gold rig (+$30/s base per tier)",
         biomeId = "desert",
         baseCost = 950.0,
-        costGrowth = 2.2,
+        costGrowth = 2.15,
         passivePerLevel = 30.0
     ),
     MINER_FROZEN(
         id = "miner_frozen",
         title = "Cryo Crystal Harvester",
-        description = "Automated frost crystal rig (+$75/s per level)",
+        description = "Automated frost crystal rig (+$75/s base per tier)",
         biomeId = "frozen",
         baseCost = 2800.0,
-        costGrowth = 2.2,
+        costGrowth = 2.15,
         passivePerLevel = 75.0
     ),
     MINER_VOLCANIC(
         id = "miner_volcanic",
         title = "Magma Core Extractor",
-        description = "Automated obsidian & core rig (+$190/s per level)",
+        description = "Automated obsidian & core rig (+$190/s base per tier)",
         biomeId = "volcanic",
         baseCost = 8000.0,
-        costGrowth = 2.2,
+        costGrowth = 2.15,
         passivePerLevel = 190.0
     ),
     MINER_JUNGLE(
         id = "miner_jungle",
         title = "Relic Synthesizer",
-        description = "Automated ancient relic rig (+$450/s per level)",
+        description = "Automated ancient relic rig (+$450/s base per tier)",
         biomeId = "jungle",
         baseCost = 22000.0,
-        costGrowth = 2.2,
+        costGrowth = 2.15,
         passivePerLevel = 450.0
     );
 
     fun costForNextLevel(currentLevel: Int): Long {
         if (currentLevel >= maxLevel) return 0L
         return (baseCost * costGrowth.pow(currentLevel)).roundToLong()
+    }
+
+    fun costForNextWorker(currentWorkers: Int): Long {
+        if (currentWorkers >= maxWorkers) return 0L
+        return (baseCost * 0.75 * 1.9.pow(currentWorkers)).roundToLong()
+    }
+
+    fun costForNextLine(currentLines: Int): Long {
+        if (currentLines >= maxLines) return 0L
+        return (baseCost * 1.35 * 2.3.pow(currentLines)).roundToLong()
     }
 }
 
@@ -187,7 +481,10 @@ enum class BiomeType(
     val accentHex: Long,
     val resourcesSummary: String,
     val spawnX: Double,
-    val spawnZ: Double
+    val spawnZ: Double,
+    val requiredAxeLevel: Int = 1,
+    val requiredPickaxeLevel: Int = 1,
+    val requiredBackpackLevel: Int = 1
 ) {
     FOREST(
         id = "forest",
@@ -207,7 +504,9 @@ enum class BiomeType(
         accentHex = 0xFF64748B,
         resourcesSummary = "Stone, Coal, Iron",
         spawnX = 0.0,
-        spawnZ = -26.0
+        spawnZ = -26.0,
+        requiredAxeLevel = 2,
+        requiredPickaxeLevel = 2
     ),
     DESERT(
         id = "desert",
@@ -217,7 +516,8 @@ enum class BiomeType(
         accentHex = 0xFFF59E0B,
         resourcesSummary = "Copper, Gold, Stone",
         spawnX = 26.0,
-        spawnZ = 0.0
+        spawnZ = 0.0,
+        requiredPickaxeLevel = 3
     ),
     FROZEN(
         id = "frozen",
@@ -227,7 +527,9 @@ enum class BiomeType(
         accentHex = 0xFF38BDF8,
         resourcesSummary = "Crystals, Iron, Wood",
         spawnX = -26.0,
-        spawnZ = 0.0
+        spawnZ = 0.0,
+        requiredPickaxeLevel = 4,
+        requiredBackpackLevel = 3
     ),
     VOLCANIC(
         id = "volcanic",
@@ -237,7 +539,9 @@ enum class BiomeType(
         accentHex = 0xFFEF4444,
         resourcesSummary = "Coal, Gold, Magma Cores",
         spawnX = 0.0,
-        spawnZ = 26.0
+        spawnZ = 26.0,
+        requiredPickaxeLevel = 5,
+        requiredBackpackLevel = 4
     ),
     JUNGLE(
         id = "jungle",
@@ -247,8 +551,25 @@ enum class BiomeType(
         accentHex = 0xFF14B8A6,
         resourcesSummary = "Wood, Crystals, Ancient Relics",
         spawnX = 26.0,
-        spawnZ = -26.0
+        spawnZ = -26.0,
+        requiredAxeLevel = 6,
+        requiredPickaxeLevel = 6
     );
+
+    fun meetsEquipmentRequirements(state: TycoonSaveState): Boolean {
+        return state.axeLevel >= requiredAxeLevel &&
+            state.pickaxeLevel >= requiredPickaxeLevel &&
+            state.backpackLevel >= requiredBackpackLevel
+    }
+
+    fun requirementSummary(): String? {
+        val parts = buildList {
+            if (requiredAxeLevel > 1) add("Axe Lv.$requiredAxeLevel")
+            if (requiredPickaxeLevel > 1) add("Pickaxe Lv.$requiredPickaxeLevel")
+            if (requiredBackpackLevel > 1) add("Bag Lv.$requiredBackpackLevel")
+        }
+        return if (parts.isEmpty()) null else "Req: ${parts.joinToString(" • ")}"
+    }
 
     companion object {
         fun fromId(id: String): BiomeType? = entries.firstOrNull { it.id == id }
@@ -310,8 +631,8 @@ object QuestCatalog {
         ),
         QuestDefinition(
             id = "q_upgrade_axe_2",
-            title = "Sharper Edge",
-            description = "Upgrade Felling Axe to Tier 2",
+            title = "Stone Edge",
+            description = "Evolve Felling Axe to Tier 2 (Stone)",
             category = QuestCategory.UPGRADE,
             requirement = QuestRequirement.UpgradeTool(UpgradeType.AXE, 2),
             rewardCoins = 90L,
@@ -347,8 +668,8 @@ object QuestCatalog {
         ),
         QuestDefinition(
             id = "q_upgrade_bag_3",
-            title = "Deep Pockets",
-            description = "Upgrade Cargo Backpack to Tier 3",
+            title = "Copper Carrier",
+            description = "Evolve Cargo Backpack to Tier 3",
             category = QuestCategory.UPGRADE,
             requirement = QuestRequirement.UpgradeTool(UpgradeType.BACKPACK, 3),
             rewardCoins = 220L,
@@ -357,7 +678,7 @@ object QuestCatalog {
         QuestDefinition(
             id = "q_build_warehouse",
             title = "Trade Logistics",
-            description = "Build the Trading Warehouse",
+            description = "Build the Grand Warehouse",
             category = QuestCategory.FACTORY,
             requirement = QuestRequirement.BuildFacility(BuildingType.WAREHOUSE, 1),
             rewardCoins = 240L,
@@ -392,13 +713,13 @@ object QuestCatalog {
             rewardXp = 250L
         ),
         QuestDefinition(
-            id = "q_upgrade_pick_4",
-            title = "Gilded Striker",
-            description = "Upgrade Mining Pickaxe to Tier 4",
+            id = "q_upgrade_pick_5",
+            title = "Steel Foundry Strike",
+            description = "Evolve Mining Pickaxe to Tier 5 (Steel)",
             category = QuestCategory.UPGRADE,
-            requirement = QuestRequirement.UpgradeTool(UpgradeType.PICKAXE, 4),
-            rewardCoins = 750L,
-            rewardXp = 280L
+            requirement = QuestRequirement.UpgradeTool(UpgradeType.PICKAXE, 5),
+            rewardCoins = 900L,
+            rewardXp = 320L
         ),
         QuestDefinition(
             id = "q_gather_gold_1",
@@ -448,6 +769,15 @@ object QuestCatalog {
             rewardXp = 750L
         ),
         QuestDefinition(
+            id = "q_upgrade_axe_7",
+            title = "Diamond Edge",
+            description = "Evolve Felling Axe to Tier 7 (Diamond)",
+            category = QuestCategory.UPGRADE,
+            requirement = QuestRequirement.UpgradeTool(UpgradeType.AXE, 7),
+            rewardCoins = 6500L,
+            rewardXp = 950L
+        ),
+        QuestDefinition(
             id = "q_unlock_jungle",
             title = "Jungle Sovereign",
             description = "Unlock the Ancient Jungle region",
@@ -465,6 +795,15 @@ object QuestCatalog {
             rewardCoins = 5500L,
             rewardXp = 900L,
             rewardItem = UniqueQuestItem.TYCOON_CROWN
+        ),
+        QuestDefinition(
+            id = "q_legendary_pick",
+            title = "Master Prospector",
+            description = "Evolve Mining Pickaxe to Tier 8 (Legendary)",
+            category = QuestCategory.UPGRADE,
+            requirement = QuestRequirement.UpgradeTool(UpgradeType.PICKAXE, 8),
+            rewardCoins = 15000L,
+            rewardXp = 1800L
         )
     )
 }
@@ -491,11 +830,27 @@ data class TycoonSaveState(
     val backpackLevel: Int = 1,
     val moveSpeedLevel: Int = 1,
     val gatherSpeedLevel: Int = 1,
+    val resourceUpgradeLevels: Map<String, Int> = emptyMap(),
     val buildingLevels: Map<String, Int> = emptyMap(),
+    val buildingWorkers: Map<String, Int> = emptyMap(),
+    val buildingLines: Map<String, Int> = emptyMap(),
+    val machineLevels: Map<String, Int> = emptyMap(),
+    val machineActive: Map<String, Boolean> = emptyMap(),
+    val warehouseStock: Map<String, Int> = emptyMap(),
+    val fleetLevels: Map<String, Int> = emptyMap(),
+    val buyerReputationXp: Map<String, Int> = emptyMap(),
+    val marketMultipliers: Map<String, Double> = emptyMap(),
+    val activeContracts: List<ContractOrder> = emptyList(),
+    val availableContracts: List<ContractOrder> = emptyList(),
+    val totalContractsCompleted: Int = 0,
+    val lastMarketTickEpochMs: Long = 0L,
     val unlockedBiomes: Set<String> = setOf("forest"),
     val claimedQuestIds: Set<String> = emptySet(),
     val uniqueItems: Set<String> = emptySet(),
     val isMuted: Boolean = false,
+    val sfxVolume: Float = 0.85f,
+    val musicVolume: Float = 0.45f,
+    val graphicsQuality: Int = 1,
     val hapticsEnabled: Boolean = true,
     val lastSavedEpochMs: Long = 0L
 ) {
@@ -539,16 +894,23 @@ data class TycoonSaveState(
 
     val backpackMaxCapacity: Int
         get() {
-            val base = when (backpackLevel.coerceIn(1, 6)) {
+            val base = when (backpackLevel.coerceIn(1, 8)) {
                 1 -> 12
                 2 -> 22
                 3 -> 36
                 4 -> 56
-                5 -> 85
-                else -> 130
+                5 -> 84
+                6 -> 126
+                7 -> 184
+                else -> 260
             }
+            val storageLvl = resourceUpgradeLevel(ResourceUpgradeType.STORAGE_CAPACITY)
+            val storageFlat = (storageLvl - 1) * 6
+            val storageMult = 1.0 + (storageLvl - 1) * 0.10
+            val whLines = buildingLineCount(BuildingType.WAREHOUSE)
+            val whBonus = warehouseLevel * (8 + whLines * 4)
             val lanternBonus = if (uniqueItems.contains(UniqueQuestItem.PRISM_LANTERN.id)) 10 else 0
-            return base + (warehouseLevel * 8) + lanternBonus
+            return ((base + storageFlat + whBonus + lanternBonus) * storageMult).roundToLong().toInt()
         }
 
     val backpackUsed: Int
@@ -557,14 +919,95 @@ data class TycoonSaveState(
     val isBackpackFull: Boolean
         get() = backpackUsed >= backpackMaxCapacity
 
+    fun machineLevel(type: MachineType): Int = (machineLevels[type.id] ?: 0).coerceIn(0, type.maxLevel)
+
+    fun isMachineRunning(type: MachineType): Boolean =
+        machineLevel(type) > 0 && (machineActive[type.id] ?: true)
+
+    fun fleetLevel(type: FleetEquipType): Int = (fleetLevels[type.id] ?: 0).coerceIn(0, type.maxLevel)
+
+    val conveyorLevel: Int
+        get() = machineLevel(MachineType.CONVEYOR_BELT)
+
+    val warehouseStockCapacity: Int
+        get() {
+            val base = 60
+            val whBonus = warehouseLevel * 45
+            val beltBonus = conveyorLevel * 15
+            val cartBonus = fleetLevel(FleetEquipType.MINING_CART) * 25
+            val forkliftBonus = fleetLevel(FleetEquipType.FORKLIFT) * 20
+            val containerBonus = fleetLevel(FleetEquipType.STORAGE_CONTAINER) * 45
+            return base + whBonus + beltBonus + cartBonus + forkliftBonus + containerBonus
+        }
+
+    val warehouseStockUsed: Int
+        get() = warehouseStock.values.sum()
+
+    val maxActiveContractsAllowed: Int
+        get() {
+            val truckLvl = fleetLevel(FleetEquipType.DELIVERY_TRUCK)
+            return when {
+                truckLvl >= 4 -> 4
+                truckLvl >= 2 -> 3
+                else -> 2
+            }
+        }
+
+    fun isMachineUnlocked(type: MachineType): Boolean =
+        playerLevel >= type.requiredPlayerLevel && unlockedBiomes.contains(type.requiredBiomeId)
+
+    fun isBuyerUnlocked(buyer: BuyerCompany): Boolean =
+        playerLevel >= buyer.unlockLevel && unlockedBiomes.contains(buyer.unlockBiomeId)
+
+    fun buyerReputation(buyer: BuyerCompany): Int = (buyerReputationXp[buyer.id] ?: 0).coerceAtLeast(0)
+
+    fun buyerReputationLevel(buyer: BuyerCompany): Int = (buyerReputation(buyer) / 50) + 1
+
+    fun marketMultiplier(goodId: String): Double =
+        (marketMultipliers[goodId] ?: 1.0).coerceIn(0.80, 1.45)
+
+    fun availableForTrade(goodId: String): Int =
+        (warehouseStock[goodId] ?: 0) + (inventory[goodId] ?: 0)
+
+    fun buyerOfferUnitPrice(buyer: BuyerCompany, goodId: String): Long {
+        val good = TradeCatalog.find(goodId) ?: return 0L
+        val base = if (!good.isManufactured) {
+            ResourceType.fromId(goodId)?.let { effectiveSellValue(it).toDouble() } ?: good.baseValue.toDouble()
+        } else {
+            val tradeLvl = resourceUpgradeLevel(ResourceUpgradeType.TRADE_VALUE)
+            val tradeMult = 1.0 + (tradeLvl - 1) * 0.15
+            val whMult = 1.0 + warehouseLevel * 0.12
+            good.baseValue * tradeMult * whMult
+        }
+        val marketMult = marketMultiplier(goodId)
+        val specialty = if (buyer.preferredGoods.contains(goodId)) buyer.specialtyMultiplier else 0.90
+        val repBonus = 1.0 + (buyerReputationLevel(buyer) - 1) * 0.06
+        return (base * marketMult * specialty * repBonus).roundToLong().coerceAtLeast(1L)
+    }
+
+    val totalMachinePowerCostPerMinute: Int
+        get() = MachineType.entries.sumOf { m ->
+            val lvl = machineLevel(m)
+            if (lvl > 0 && isMachineRunning(m)) m.powerCostPerMinute * lvl else 0
+        }
+
+    fun buildingEffectivePassive(building: BuildingType): Double {
+        val lvl = buildingLevel(building)
+        if (lvl <= 0) return 0.0
+        val workers = buildingWorkerCount(building)
+        val lines = buildingLineCount(building)
+        val staffMult = (1.0 + workers * 0.35) * (1.0 + lines * 0.65)
+        val autoLvl = resourceUpgradeLevel(ResourceUpgradeType.AUTO_PRODUCTION)
+        val autoMult = 1.0 + (autoLvl - 1) * 0.20
+        val crownMult = if (uniqueItems.contains(UniqueQuestItem.TYCOON_CROWN.id)) 1.35 else 1.0
+        return lvl * building.passivePerLevel * staffMult * autoMult * crownMult
+    }
+
     val passiveIncomePerSecond: Double
         get() {
-            val raw = BuildingType.entries.sumOf { building ->
-                val lvl = buildingLevels[building.id] ?: 0
-                lvl * building.passivePerLevel
-            }
-            val crownMult = if (uniqueItems.contains(UniqueQuestItem.TYCOON_CROWN.id)) 1.35 else 1.0
-            return raw * crownMult
+            val buildingPassive = BuildingType.entries.sumOf { buildingEffectivePassive(it) }
+            val excavatorMult = 1.0 + fleetLevel(FleetEquipType.EXCAVATOR) * 0.15
+            return buildingPassive * excavatorMult
         }
 
     fun upgradeLevel(type: UpgradeType): Int = when (type) {
@@ -575,9 +1018,50 @@ data class TycoonSaveState(
         UpgradeType.GATHER_SPEED -> gatherSpeedLevel
     }
 
-    fun buildingLevel(type: BuildingType): Int = buildingLevels[type.id] ?: 0
+    fun resourceUpgradeLevel(type: ResourceUpgradeType): Int =
+        (resourceUpgradeLevels[type.id] ?: 1).coerceIn(1, type.maxLevel)
+
+    fun buildingLevel(type: BuildingType): Int = (buildingLevels[type.id] ?: 0).coerceIn(0, type.maxLevel)
+
+    fun buildingWorkerCount(type: BuildingType): Int =
+        (buildingWorkers[type.id] ?: 0).coerceIn(0, type.maxWorkers)
+
+    fun buildingLineCount(type: BuildingType): Int =
+        (buildingLines[type.id] ?: 0).coerceIn(0, type.maxLines)
 
     fun isBiomeUnlocked(biome: BiomeType): Boolean = unlockedBiomes.contains(biome.id)
+
+    fun meetsResourceRequirement(req: ResourceRequirement?): Boolean {
+        if (req == null) return true
+        return (gatheredTotals[req.resource.id] ?: 0) >= req.requiredTotal
+    }
+
+    fun gatheredCount(resource: ResourceType): Int = gatheredTotals[resource.id] ?: 0
+
+    fun effectiveSellValue(resource: ResourceType): Int {
+        val tradeLvl = resourceUpgradeLevel(ResourceUpgradeType.TRADE_VALUE)
+        var mult = (1.0 + (tradeLvl - 1) * 0.15) + warehouseLevel * (0.20 + buildingLineCount(BuildingType.WAREHOUSE) * 0.08)
+        if (resource == ResourceType.WOOD) {
+            val sawLvl = buildingLevel(BuildingType.SAWMILL)
+            val sawBoost = 1.0 + buildingWorkerCount(BuildingType.SAWMILL) * 0.25 + buildingLineCount(BuildingType.SAWMILL) * 0.35
+            mult += sawLvl * 0.45 * sawBoost
+            if (uniqueItems.contains(UniqueQuestItem.LUMBER_TOTEM.id)) mult += 0.25
+        }
+        if (resource == ResourceType.STONE || resource == ResourceType.COAL ||
+            resource == ResourceType.COPPER || resource == ResourceType.IRON || resource == ResourceType.GOLD
+        ) {
+            val smLvl = buildingLevel(BuildingType.SMELTER)
+            val smBoost = 1.0 + buildingWorkerCount(BuildingType.SMELTER) * 0.25 + buildingLineCount(BuildingType.SMELTER) * 0.35
+            mult += smLvl * 0.45 * smBoost
+            if (uniqueItems.contains(UniqueQuestItem.MINER_CREST.id)) mult += 0.25
+        }
+        if (resource == ResourceType.CRYSTAL && uniqueItems.contains(UniqueQuestItem.PRISM_LANTERN.id)) {
+            mult += 0.25
+        }
+        if (uniqueItems.contains(UniqueQuestItem.GOLDEN_COMPASS.id)) mult += 0.15
+        if (uniqueItems.contains(UniqueQuestItem.TYCOON_CROWN.id)) mult += 0.35
+        return (resource.baseValue * mult).roundToLong().toInt().coerceAtLeast(1)
+    }
 
     fun evaluateQuests(): List<QuestProgress> {
         val minerCount = listOf(

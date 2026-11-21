@@ -1,12 +1,17 @@
 <resources>
     <string name="app_name">Wildcraft Tycoon</string>
     <string name="cd_open_shop">Open Upgrade Shop</string>
-    <string name="cd_open_biomes">Open World Biomes</string>
-    <string name="cd_open_quests">Open Quests Board</string>
+    <string name="cd_open_machinery">Open Industrial Machinery &amp; Fleet</string>
+    <string name="cd_open_market">Open Buyers &amp; Contracts Market</string>
+    <string name="cd_open_business">Open Business &amp; Factories</string>
+    <string name="cd_open_backpack">Open Backpack &amp; Inventory</string>
+    <string name="cd_open_biomes">Open World Regions</string>
+    <string name="cd_open_quests">Open Quests &amp; Achievements</string>
+    <string name="cd_open_settings">Open Settings &amp; Audio</string>
     <string name="cd_open_advisor">Open Tycoon Advisor Chat</string>
     <string name="cd_open_studio">Open Concept Art Studio</string>
     <string name="cd_toggle_audio">Toggle Sound Effects</string>
-    <string name="cd_close_sheet">Close Sheet</string>
+    <string name="cd_close_sheet">Close Menu</string>
     <string name="cd_send_message">Send Message</string>
     <string name="cd_generated_concept">Generated Concept Artwork</string>
     <string name="firebase_required_notice_chat">Firebase is not enabled, so Tycoon Advisor is showing clearly labeled sample responses. Enable Firebase AI Logic in AI Studio to connect live Gemini chat.</string>

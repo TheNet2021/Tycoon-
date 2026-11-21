@@ -2,13 +2,13 @@ package com.example.ui.sheets
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -20,26 +20,20 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Factory
 import androidx.compose.material.icons.filled.Forest
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.WorkspacePremium
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.minimumInteractiveComponentSize
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -51,14 +45,27 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.R
 import com.example.data.QuestCategory
 import com.example.data.QuestProgress
 import com.example.data.TycoonSaveState
 import com.example.data.UniqueQuestItem
+import com.example.ui.components.FrontierActionButton
+import com.example.ui.components.FrontierBadgeChip
+import com.example.ui.components.FrontierGlassCard
+import com.example.ui.components.FrontierSheetScaffold
 import com.example.ui.components.formatCompactCurrency
+import com.example.ui.theme.AmberBright
+import com.example.ui.theme.AmberGold
+import com.example.ui.theme.CreamText
+import com.example.ui.theme.CrystalCyan
+import com.example.ui.theme.EmeraldCanopy
+import com.example.ui.theme.LichenMuted
+import com.example.ui.theme.ObsidianForest
+import com.example.ui.theme.PanelBorder
+import com.example.ui.theme.PanelCard
+import com.example.ui.theme.PanelElevated
 
 private enum class QuestFilter(val label: String) {
     ALL("All"),
@@ -67,16 +74,13 @@ private enum class QuestFilter(val label: String) {
     CLAIMED("Completed")
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QuestBoardSheet(
     state: TycoonSaveState,
     onClaimQuest: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var selectedFilter by remember { mutableStateOf(QuestFilter.ALL) }
-
     val allQuests = remember(state) { state.evaluateQuests() }
     val filteredQuests = remember(allQuests, selectedFilter) {
         when (selectedFilter) {
@@ -86,168 +90,152 @@ fun QuestBoardSheet(
             QuestFilter.CLAIMED -> allQuests.filter { it.isClaimed }
         }
     }
-    val ownedRelics = remember(state.uniqueItems) {
-        UniqueQuestItem.entries.filter { state.uniqueItems.contains(it.id) }
-    }
+    val completedCount = remember(allQuests) { allQuests.count { it.isClaimed } }
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surface
+    FrontierSheetScaffold(
+        title = "Quests & Achievements",
+        subtitle = "$completedCount of ${allQuests.size} milestones completed",
+        headerIcon = Icons.Filled.EmojiEvents,
+        accentColor = AmberBright,
+        coins = state.coins,
+        closeTestTag = "btn_close_quests",
+        onDismiss = onDismiss
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .padding(horizontal = 16.dp)
+        // Pioneer Level & XP Progress Card
+        FrontierGlassCard(
+            accentBorder = CrystalCyan,
+            modifier = Modifier.padding(bottom = 10.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Surface(
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                        modifier = Modifier.size(40.dp)
+            Column(modifier = Modifier.padding(13.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Pioneer Level ${state.playerLevel}",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = CreamText
+                    )
+                    Text(
+                        text = "${state.xpIntoCurrentLevel} / ${state.xpNeededForNextLevel} XP",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = CrystalCyan,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                val xpFrac = (state.xpIntoCurrentLevel.toFloat() / state.xpNeededForNextLevel.coerceAtLeast(1L))
+                    .coerceIn(0f, 1f)
+                LinearProgressIndicator(
+                    progress = { xpFrac },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .clip(CircleShape),
+                    color = CrystalCyan,
+                    trackColor = PanelElevated,
+                    strokeCap = StrokeCap.Round
+                )
+            }
+        }
+
+        // Relics / Achievements Showcase Shelf (Unlocked + Locked Goals)
+        Text(
+            text = "Frontier Relics (${state.uniqueItems.size}/${UniqueQuestItem.entries.size})",
+            style = MaterialTheme.typography.labelLarge,
+            color = EmeraldCanopy
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(UniqueQuestItem.entries) { relic ->
+                val unlocked = state.uniqueItems.contains(relic.id)
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = if (unlocked) EmeraldCanopy.copy(alpha = 0.14f) else PanelCard,
+                    border = BorderStroke(
+                        1.dp,
+                        if (unlocked) EmeraldCanopy.copy(alpha = 0.6f) else PanelBorder.copy(alpha = 0.5f)
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.EmojiEvents,
+                            imageVector = if (unlocked) Icons.Filled.WorkspacePremium else Icons.Filled.Lock,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(9.dp)
+                            tint = if (unlocked) EmeraldCanopy else LichenMuted,
+                            modifier = Modifier.size(16.dp)
                         )
-                    }
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column {
-                        Text(
-                            text = "Frontier Quests",
-                            style = MaterialTheme.typography.headlineSmall
-                        )
-                        Text(
-                            text = "Pioneer Level ${state.playerLevel} • ${state.xpIntoCurrentLevel}/${state.xpNeededForNextLevel} XP",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
-                IconButton(
-                    onClick = onDismiss,
-                    modifier = Modifier
-                        .minimumInteractiveComponentSize()
-                        .testTag("btn_close_quests")
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Close,
-                        contentDescription = stringResource(R.string.cd_close_sheet)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            val xpFrac = (state.xpIntoCurrentLevel.toFloat() / state.xpNeededForNextLevel.coerceAtLeast(1L))
-                .coerceIn(0f, 1f)
-            LinearProgressIndicator(
-                progress = { xpFrac },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(6.dp)
-                    .clip(CircleShape),
-                color = MaterialTheme.colorScheme.tertiary,
-                trackColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                strokeCap = StrokeCap.Round
-            )
-
-            if (ownedRelics.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(10.dp))
-                Text(
-                    text = "Unlocked Unique Relics (${ownedRelics.size}/${UniqueQuestItem.entries.size})",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.secondary
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(ownedRelics) { relic ->
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.6f))
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.WorkspacePremium,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.secondary,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Column {
-                                    Text(
-                                        text = relic.title,
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                                    )
-                                    Text(
-                                        text = relic.perkDescription,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.85f)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(QuestFilter.entries) { filter ->
-                    FilterChip(
-                        selected = selectedFilter == filter,
-                        onClick = { selectedFilter = filter },
-                        label = { Text(filter.label) },
-                        modifier = Modifier.testTag("filter_quest_${filter.name.lowercase()}")
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(380.dp),
-                contentPadding = PaddingValues(bottom = 18.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                if (filteredQuests.isEmpty()) {
-                    item {
-                        Surface(
-                            shape = RoundedCornerShape(16.dp),
-                            color = MaterialTheme.colorScheme.surfaceContainer,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Column {
                             Text(
-                                text = "No quests in this filter yet. Keep exploring the frontier!",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(16.dp)
+                                text = relic.title,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = if (unlocked) CreamText else LichenMuted
+                            )
+                            Text(
+                                text = relic.perkDescription,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (unlocked) EmeraldCanopy else LichenMuted.copy(alpha = 0.75f)
                             )
                         }
                     }
-                } else {
-                    items(filteredQuests, key = { it.quest.id }) { progress ->
-                        QuestCard(
-                            progress = progress,
-                            onClaim = { onClaimQuest(progress.quest.id) }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(QuestFilter.entries) { filter ->
+                FilterChip(
+                    selected = selectedFilter == filter,
+                    onClick = { selectedFilter = filter },
+                    label = { Text(filter.label, style = MaterialTheme.typography.labelMedium) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = AmberGold,
+                        selectedLabelColor = ObsidianForest,
+                        containerColor = PanelCard,
+                        labelColor = LichenMuted
+                    ),
+                    border = FilterChipDefaults.filterChipBorder(
+                        enabled = true,
+                        selected = selectedFilter == filter,
+                        borderColor = PanelBorder
+                    ),
+                    modifier = Modifier.testTag("filter_quest_${filter.name.lowercase()}")
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(310.dp),
+            contentPadding = PaddingValues(bottom = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            if (filteredQuests.isEmpty()) {
+                item {
+                    FrontierGlassCard {
+                        Text(
+                            text = "No quests in this filter yet. Keep exploring the frontier!",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = LichenMuted,
+                            modifier = Modifier.padding(16.dp)
                         )
                     }
+                }
+            } else {
+                items(filteredQuests, key = { it.quest.id }) { progress ->
+                    QuestCard(
+                        progress = progress,
+                        onClaim = { onClaimQuest(progress.quest.id) }
+                    )
                 }
             }
         }
@@ -260,48 +248,45 @@ private fun QuestCard(
     onClaim: () -> Unit
 ) {
     val quest = progress.quest
-    Surface(
-        shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        border = BorderStroke(
-            1.dp,
-            when {
-                progress.isReadyToClaim -> MaterialTheme.colorScheme.primary
-                progress.isClaimed -> MaterialTheme.colorScheme.secondary.copy(alpha = 0.4f)
-                else -> MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
-            }
-        ),
-        modifier = Modifier.fillMaxWidth()
+    FrontierGlassCard(
+        accentBorder = when {
+            progress.isReadyToClaim -> AmberGold
+            progress.isClaimed -> EmeraldCanopy
+            else -> null
+        }
     ) {
         Column(modifier = Modifier.padding(13.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    modifier = Modifier.size(40.dp)
+                    shape = RoundedCornerShape(13.dp),
+                    color = if (progress.isClaimed) EmeraldCanopy.copy(alpha = 0.16f) else PanelElevated,
+                    border = BorderStroke(
+                        1.dp,
+                        if (progress.isReadyToClaim) AmberGold.copy(alpha = 0.6f)
+                        else PanelBorder.copy(alpha = 0.5f)
+                    ),
+                    modifier = Modifier.size(44.dp)
                 ) {
-                    Icon(
-                        imageVector = categoryIcon(quest.category),
-                        contentDescription = null,
-                        tint = if (progress.isClaimed) {
-                            MaterialTheme.colorScheme.secondary
-                        } else {
-                            MaterialTheme.colorScheme.primary
-                        },
-                        modifier = Modifier.padding(9.dp)
-                    )
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = categoryIcon(quest.category),
+                            contentDescription = null,
+                            tint = if (progress.isClaimed) EmeraldCanopy else AmberBright,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
                 }
                 Spacer(modifier = Modifier.width(10.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = "${quest.category.label.uppercase()} • ${quest.title}",
                         style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = CreamText
                     )
                     Text(
                         text = quest.description,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = LichenMuted
                     )
                 }
                 Spacer(modifier = Modifier.width(8.dp))
@@ -310,29 +295,24 @@ private fun QuestCard(
                         Icon(
                             imageVector = Icons.Filled.CheckCircle,
                             contentDescription = "Quest Claimed",
-                            tint = MaterialTheme.colorScheme.secondary,
+                            tint = EmeraldCanopy,
                             modifier = Modifier.size(26.dp)
                         )
                     }
                     progress.isReadyToClaim -> {
-                        Button(
-                            onClick = onClaim,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary
-                            ),
-                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-                            modifier = Modifier
-                                .minimumInteractiveComponentSize()
-                                .testTag("btn_claim_${quest.id}")
-                        ) {
-                            Text("Claim", style = MaterialTheme.typography.labelLarge)
-                        }
+                        FrontierActionButton(
+                            text = "Claim",
+                            enabled = true,
+                            accentColor = AmberGold,
+                            testTag = "btn_claim_${quest.id}",
+                            onClick = onClaim
+                        )
                     }
                     else -> {
                         Text(
                             text = "${progress.current}/${progress.target}",
                             style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = LichenMuted
                         )
                     }
                 }
@@ -346,8 +326,8 @@ private fun QuestCard(
                     .fillMaxWidth()
                     .height(5.dp)
                     .clip(CircleShape),
-                color = if (progress.isCompleted) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary,
-                trackColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                color = if (progress.isCompleted) EmeraldCanopy else AmberGold,
+                trackColor = PanelElevated,
                 strokeCap = StrokeCap.Round
             )
 
@@ -357,44 +337,22 @@ private fun QuestCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                RewardChip(text = "+${formatCompactCurrency(quest.rewardCoins)}")
-                RewardChip(text = "+${quest.rewardXp} XP")
+                FrontierBadgeChip(
+                    text = "+${formatCompactCurrency(quest.rewardCoins)}",
+                    accent = AmberBright
+                )
+                FrontierBadgeChip(
+                    text = "+${quest.rewardXp} XP",
+                    accent = CrystalCyan
+                )
                 quest.rewardItem?.let { item ->
-                    RewardChip(text = item.title, isRelic = true)
+                    FrontierBadgeChip(
+                        text = item.title,
+                        accent = EmeraldCanopy,
+                        icon = Icons.Filled.Star
+                    )
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun RewardChip(text: String, isRelic: Boolean = false) {
-    Surface(
-        shape = RoundedCornerShape(999.dp),
-        color = if (isRelic) {
-            MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.65f)
-        } else {
-            MaterialTheme.colorScheme.surfaceContainerHigh
-        }
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            if (isRelic) {
-                Icon(
-                    imageVector = Icons.Filled.Star,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.tertiary,
-                    modifier = Modifier.size(12.dp)
-                )
-                Spacer(modifier = Modifier.width(3.dp))
-            }
-            Text(
-                text = text,
-                style = MaterialTheme.typography.labelSmall,
-                color = if (isRelic) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary
-            )
         }
     }
 }

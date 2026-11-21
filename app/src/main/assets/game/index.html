@@ -18,13 +18,15 @@
       width: 100%;
       height: 100%;
       overflow: hidden;
-      background: #0f141b;
+      background: linear-gradient(180deg, #5bb3e0 0%, #3b8ea5 55%, #234d36 100%);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
     #game-canvas {
+      position: fixed;
+      inset: 0;
       display: block;
-      width: 100%;
-      height: 100%;
+      width: 100vw;
+      height: 100vh;
     }
     #floating-layer {
       position: fixed;
@@ -37,20 +39,25 @@
       position: absolute;
       transform: translate(-50%, -50%);
       font-weight: 800;
-      font-size: 15px;
+      font-size: 14px;
       letter-spacing: 0.2px;
-      text-shadow: 0 2px 6px rgba(0, 0, 0, 0.75);
+      padding: 3px 9px;
+      border-radius: 999px;
+      background: rgba(11, 18, 16, 0.72);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
       white-space: nowrap;
       will-change: transform, opacity;
     }
     #banner-toast {
       position: fixed;
-      top: 108px;
+      top: 136px;
       left: 50%;
       transform: translateX(-50%) translateY(-10px);
-      background: rgba(22, 29, 38, 0.92);
-      border: 1.5px solid rgba(245, 158, 11, 0.7);
-      color: #fde68a;
+      background: rgba(17, 28, 24, 0.92);
+      border: 1.5px solid rgba(246, 183, 60, 0.75);
+      color: #fef0c7;
       padding: 8px 18px;
       border-radius: 999px;
       font-size: 13px;
@@ -59,83 +66,62 @@
       transition: opacity 0.25s ease, transform 0.25s ease;
       pointer-events: none;
       z-index: 20;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+      box-shadow: 0 10px 26px rgba(0, 0, 0, 0.48);
       white-space: nowrap;
     }
     #banner-toast.visible {
       opacity: 1;
       transform: translateX(-50%) translateY(0);
     }
-    #biome-pill {
-      position: fixed;
-      top: 98px;
-      left: 14px;
-      background: rgba(15, 20, 27, 0.72);
-      border: 1px solid rgba(255, 255, 255, 0.14);
-      color: #e2e8f0;
-      padding: 5px 12px;
-      border-radius: 999px;
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.4px;
-      pointer-events: none;
-      z-index: 12;
-      backdrop-filter: blur(6px);
-    }
     #joystick-zone {
       position: fixed;
       left: 0;
       bottom: 0;
-      width: 58vw;
-      height: 52vh;
+      width: 56vw;
+      height: 46vh;
       z-index: 15;
     }
     #joystick-base {
       position: fixed;
-      left: 28px;
-      bottom: 36px;
-      width: 116px;
-      height: 116px;
+      left: 24px;
+      bottom: 30px;
+      width: 112px;
+      height: 112px;
       border-radius: 50%;
-      background: radial-gradient(circle, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.16) 100%);
-      border: 2px solid rgba(255, 255, 255, 0.28);
-      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35), inset 0 0 18px rgba(255, 255, 255, 0.08);
+      background: radial-gradient(circle, rgba(17, 28, 24, 0.42) 0%, rgba(11, 18, 16, 0.72) 100%);
+      border: 1.8px solid rgba(247, 244, 234, 0.26);
+      box-shadow:
+        0 10px 28px rgba(0, 0, 0, 0.42),
+        inset 0 0 16px rgba(255, 255, 255, 0.06);
       pointer-events: none;
-      transition: opacity 0.18s ease;
-      opacity: 0.72;
+      transition: opacity 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+      opacity: 0.78;
+    }
+    #joystick-base::before {
+      content: "";
+      position: absolute;
+      inset: 14px;
+      border-radius: 50%;
+      border: 1px dashed rgba(247, 244, 234, 0.18);
     }
     #joystick-base.active {
       opacity: 1;
-      border-color: rgba(245, 158, 11, 0.85);
+      border-color: rgba(246, 183, 60, 0.9);
+      transform: scale(1.03);
     }
     #joystick-knob {
       position: absolute;
       left: 50%;
       top: 50%;
-      width: 48px;
-      height: 48px;
-      margin-left: -24px;
-      margin-top: -24px;
+      width: 46px;
+      height: 46px;
+      margin-left: -23px;
+      margin-top: -23px;
       border-radius: 50%;
-      background: linear-gradient(145deg, #fbbf24, #d97706);
-      border: 2.5px solid #fef3c7;
-      box-shadow: 0 4px 14px rgba(245, 158, 11, 0.5);
+      background: radial-gradient(circle at 32% 30%, #ffd97d 0%, #f6b73c 55%, #b4690e 100%);
+      border: 2px solid #fef0c7;
+      box-shadow: 0 6px 18px rgba(246, 183, 60, 0.55);
       will-change: transform;
-    }
-    #joystick-hint {
-      position: fixed;
-      left: 28px;
-      bottom: 16px;
-      width: 116px;
-      text-align: center;
-      font-size: 10px;
-      font-weight: 700;
-      letter-spacing: 0.6px;
-      text-transform: uppercase;
-      color: rgba(248, 250, 252, 0.65);
-      text-shadow: 0 1px 4px rgba(0,0,0,0.8);
-      pointer-events: none;
-      z-index: 14;
     }
     #loading-overlay {
       position: fixed;
@@ -144,8 +130,8 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      background: radial-gradient(circle at center, #1e293b 0%, #0f141b 100%);
-      color: #f8fafc;
+      background: radial-gradient(circle at center, #183026 0%, #0b1210 100%);
+      color: #f7f4ea;
       z-index: 50;
       transition: opacity 0.35s ease;
     }
@@ -157,8 +143,8 @@
       width: 44px;
       height: 44px;
       border-radius: 50%;
-      border: 4px solid rgba(245, 158, 11, 0.25);
-      border-top-color: #f59e0b;
+      border: 4px solid rgba(246, 183, 60, 0.22);
+      border-top-color: #f6b73c;
       animation: spin 0.9s linear infinite;
       margin-bottom: 14px;
     }
@@ -170,7 +156,6 @@
 <body>
   <canvas id="game-canvas"></canvas>
   <div id="floating-layer"></div>
-  <div id="biome-pill">Green Forest</div>
   <div id="banner-toast"></div>
 
   <div id="joystick-zone">
@@ -178,21 +163,26 @@
       <div id="joystick-knob"></div>
     </div>
   </div>
-  <div id="joystick-hint">Move</div>
 
   <div id="loading-overlay">
     <div class="spinner"></div>
     <div id="loading-text" style="font-size: 15px; font-weight: 700; letter-spacing: 0.3px;">
-      Building 3D Frontier...
+      Preparing Green Forest...
     </div>
   </div>
 
   <script>
+    window.addEventListener("error", function (ev) {
+      const txt = document.getElementById("loading-text");
+      if (txt && !document.getElementById("loading-overlay").classList.contains("hidden")) {
+        txt.textContent = "3D init error: " + (ev.message || "Unknown error");
+      }
+    });
     (function loadThreeAndBoot() {
       const cdnUrls = [
         "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js",
-        "https://unpkg.com/three@0.128.0/build/three.min.js",
-        "https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"
+        "https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js",
+        "https://unpkg.com/three@0.128.0/build/three.min.js"
       ];
       let idx = 0;
       function tryLoadNext() {
@@ -217,6 +207,9 @@
       function bootGameScript() {
         const g = document.createElement("script");
         g.src = "game.js";
+        g.onerror = function () {
+          document.getElementById("loading-text").textContent = "Failed to load game.js";
+        };
         document.body.appendChild(g);
       }
       tryLoadNext();

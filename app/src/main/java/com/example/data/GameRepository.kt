@@ -69,21 +69,36 @@ class GameRepository(private val context: Context) {
         root.put("backpackLevel", state.backpackLevel)
         root.put("moveSpeedLevel", state.moveSpeedLevel)
         root.put("gatherSpeedLevel", state.gatherSpeedLevel)
+        root.put("totalContractsCompleted", state.totalContractsCompleted)
+        root.put("lastMarketTickEpochMs", state.lastMarketTickEpochMs)
         root.put("isMuted", state.isMuted)
+        root.put("sfxVolume", state.sfxVolume.toDouble())
+        root.put("musicVolume", state.musicVolume.toDouble())
+        root.put("graphicsQuality", state.graphicsQuality)
         root.put("hapticsEnabled", state.hapticsEnabled)
         root.put("lastSavedEpochMs", state.lastSavedEpochMs)
 
-        val invJson = JSONObject()
-        state.inventory.forEach { (k, v) -> if (v > 0) invJson.put(k, v) }
-        root.put("inventory", invJson)
+        root.put("inventory", writeIntMap(state.inventory, minVal = 1))
+        root.put("gatheredTotals", writeIntMap(state.gatheredTotals, minVal = 1))
+        root.put("resourceUpgradeLevels", writeIntMap(state.resourceUpgradeLevels, minVal = 2))
+        root.put("buildingLevels", writeIntMap(state.buildingLevels, minVal = 1))
+        root.put("buildingWorkers", writeIntMap(state.buildingWorkers, minVal = 1))
+        root.put("buildingLines", writeIntMap(state.buildingLines, minVal = 1))
+        root.put("machineLevels", writeIntMap(state.machineLevels, minVal = 1))
+        root.put("warehouseStock", writeIntMap(state.warehouseStock, minVal = 1))
+        root.put("fleetLevels", writeIntMap(state.fleetLevels, minVal = 1))
+        root.put("buyerReputationXp", writeIntMap(state.buyerReputationXp, minVal = 1))
 
-        val gatheredJson = JSONObject()
-        state.gatheredTotals.forEach { (k, v) -> if (v > 0) gatheredJson.put(k, v) }
-        root.put("gatheredTotals", gatheredJson)
+        val activeMachJson = JSONObject()
+        state.machineActive.forEach { (k, v) -> activeMachJson.put(k, v) }
+        root.put("machineActive", activeMachJson)
 
-        val bldJson = JSONObject()
-        state.buildingLevels.forEach { (k, v) -> if (v > 0) bldJson.put(k, v) }
-        root.put("buildingLevels", bldJson)
+        val marketJson = JSONObject()
+        state.marketMultipliers.forEach { (k, v) -> marketJson.put(k, v) }
+        root.put("marketMultipliers", marketJson)
+
+        root.put("activeContracts", writeContracts(state.activeContracts))
+        root.put("availableContracts", writeContracts(state.availableContracts))
 
         val bioArray = JSONArray()
         state.unlockedBiomes.forEach { bioArray.put(it) }
@@ -102,10 +117,6 @@ class GameRepository(private val context: Context) {
     fun deserialize(raw: String): TycoonSaveState {
         return try {
             val root = JSONObject(raw)
-            val inventory = readIntMap(root.optJSONObject("inventory"))
-            val gatheredTotals = readIntMap(root.optJSONObject("gatheredTotals"))
-            val buildings = readIntMap(root.optJSONObject("buildingLevels"))
-
             val bioArr = root.optJSONArray("unlockedBiomes")
             val biomes = buildSet {
                 add("forest")
@@ -117,31 +128,50 @@ class GameRepository(private val context: Context) {
                 }
             }
 
-            val claimedQuestIds = readStringSet(root.optJSONArray("claimedQuestIds"))
-            val uniqueItems = readStringSet(root.optJSONArray("uniqueItems"))
-
             TycoonSaveState(
                 coins = root.optLong("coins", 0L).coerceAtLeast(0L),
                 lifetimeEarned = root.optLong("lifetimeEarned", 0L).coerceAtLeast(0L),
                 xp = root.optLong("xp", 0L).coerceAtLeast(0L),
-                inventory = inventory,
-                gatheredTotals = gatheredTotals,
-                axeLevel = root.optInt("axeLevel", 1).coerceIn(1, 6),
-                pickaxeLevel = root.optInt("pickaxeLevel", 1).coerceIn(1, 6),
-                backpackLevel = root.optInt("backpackLevel", 1).coerceIn(1, 6),
-                moveSpeedLevel = root.optInt("moveSpeedLevel", 1).coerceIn(1, 6),
-                gatherSpeedLevel = root.optInt("gatherSpeedLevel", 1).coerceIn(1, 6),
-                buildingLevels = buildings,
+                inventory = readIntMap(root.optJSONObject("inventory")),
+                gatheredTotals = readIntMap(root.optJSONObject("gatheredTotals")),
+                axeLevel = root.optInt("axeLevel", 1).coerceIn(1, 8),
+                pickaxeLevel = root.optInt("pickaxeLevel", 1).coerceIn(1, 8),
+                backpackLevel = root.optInt("backpackLevel", 1).coerceIn(1, 8),
+                moveSpeedLevel = root.optInt("moveSpeedLevel", 1).coerceIn(1, 8),
+                gatherSpeedLevel = root.optInt("gatherSpeedLevel", 1).coerceIn(1, 8),
+                resourceUpgradeLevels = readIntMap(root.optJSONObject("resourceUpgradeLevels")),
+                buildingLevels = readIntMap(root.optJSONObject("buildingLevels")),
+                buildingWorkers = readIntMap(root.optJSONObject("buildingWorkers")),
+                buildingLines = readIntMap(root.optJSONObject("buildingLines")),
+                machineLevels = readIntMap(root.optJSONObject("machineLevels")),
+                machineActive = readBooleanMap(root.optJSONObject("machineActive")),
+                warehouseStock = readIntMap(root.optJSONObject("warehouseStock")),
+                fleetLevels = readIntMap(root.optJSONObject("fleetLevels")),
+                buyerReputationXp = readIntMap(root.optJSONObject("buyerReputationXp")),
+                marketMultipliers = readDoubleMap(root.optJSONObject("marketMultipliers")),
+                activeContracts = readContracts(root.optJSONArray("activeContracts")),
+                availableContracts = readContracts(root.optJSONArray("availableContracts")),
+                totalContractsCompleted = root.optInt("totalContractsCompleted", 0).coerceAtLeast(0),
+                lastMarketTickEpochMs = root.optLong("lastMarketTickEpochMs", 0L),
                 unlockedBiomes = biomes,
-                claimedQuestIds = claimedQuestIds,
-                uniqueItems = uniqueItems,
+                claimedQuestIds = readStringSet(root.optJSONArray("claimedQuestIds")),
+                uniqueItems = readStringSet(root.optJSONArray("uniqueItems")),
                 isMuted = root.optBoolean("isMuted", false),
+                sfxVolume = root.optDouble("sfxVolume", 0.85).toFloat().coerceIn(0f, 1f),
+                musicVolume = root.optDouble("musicVolume", 0.45).toFloat().coerceIn(0f, 1f),
+                graphicsQuality = root.optInt("graphicsQuality", 1).coerceIn(0, 2),
                 hapticsEnabled = root.optBoolean("hapticsEnabled", true),
                 lastSavedEpochMs = root.optLong("lastSavedEpochMs", 0L)
             )
         } catch (_: Exception) {
             TycoonSaveState()
         }
+    }
+
+    private fun writeIntMap(map: Map<String, Int>, minVal: Int): JSONObject {
+        val obj = JSONObject()
+        map.forEach { (k, v) -> if (v >= minVal) obj.put(k, v) }
+        return obj
     }
 
     private fun readIntMap(obj: JSONObject?): Map<String, Int> {
@@ -152,6 +182,73 @@ class GameRepository(private val context: Context) {
                 val k = keys.next()
                 val v = obj.optInt(k, 0)
                 if (v > 0) put(k, v)
+            }
+        }
+    }
+
+    private fun readBooleanMap(obj: JSONObject?): Map<String, Boolean> {
+        if (obj == null) return emptyMap()
+        return buildMap {
+            val keys = obj.keys()
+            while (keys.hasNext()) {
+                val k = keys.next()
+                put(k, obj.optBoolean(k, true))
+            }
+        }
+    }
+
+    private fun readDoubleMap(obj: JSONObject?): Map<String, Double> {
+        if (obj == null) return emptyMap()
+        return buildMap {
+            val keys = obj.keys()
+            while (keys.hasNext()) {
+                val k = keys.next()
+                val v = obj.optDouble(k, 1.0)
+                if (!v.isNaN() && v > 0.0) put(k, v)
+            }
+        }
+    }
+
+    private fun writeContracts(list: List<ContractOrder>): JSONArray {
+        val arr = JSONArray()
+        list.forEach { c ->
+            val obj = JSONObject()
+            obj.put("id", c.id)
+            obj.put("buyerId", c.buyerId)
+            obj.put("goodId", c.goodId)
+            obj.put("quantity", c.quantity)
+            obj.put("tier", c.tier.name)
+            obj.put("rewardCoins", c.rewardCoins)
+            obj.put("rewardXp", c.rewardXp)
+            obj.put("rewardRep", c.rewardRep)
+            obj.put("acceptedEpochMs", c.acceptedEpochMs)
+            obj.put("deadlineEpochMs", c.deadlineEpochMs)
+            arr.put(obj)
+        }
+        return arr
+    }
+
+    private fun readContracts(arr: JSONArray?): List<ContractOrder> {
+        if (arr == null) return emptyList()
+        return buildList {
+            for (i in 0 until arr.length()) {
+                val obj = arr.optJSONObject(i) ?: continue
+                val tier = runCatching { ContractTier.valueOf(obj.optString("tier", "SMALL")) }
+                    .getOrDefault(ContractTier.SMALL)
+                add(
+                    ContractOrder(
+                        id = obj.optString("id"),
+                        buyerId = obj.optString("buyerId"),
+                        goodId = obj.optString("goodId"),
+                        quantity = obj.optInt("quantity", 5),
+                        tier = tier,
+                        rewardCoins = obj.optLong("rewardCoins", 50L),
+                        rewardXp = obj.optLong("rewardXp", 20L),
+                        rewardRep = obj.optInt("rewardRep", 10),
+                        acceptedEpochMs = obj.optLong("acceptedEpochMs", 0L),
+                        deadlineEpochMs = obj.optLong("deadlineEpochMs", 0L)
+                    )
+                )
             }
         }
     }
