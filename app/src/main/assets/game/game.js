@@ -494,9 +494,11 @@
   scene.fog = new THREE.FogExp2(currentFogColor.getHex(), 0.0038);
 
   const initialSize = getViewportSize();
-  const camera = new THREE.PerspectiveCamera(46, initialSize.w / initialSize.h, 0.4, 210);
-  camera.position.set(0, 2.35, 6.35);
-  camera.lookAt(0, 1.32, 1.7);
+  const GAMEPLAY_FOV = 70;
+  const MENU_FOV = 56;
+  const camera = new THREE.PerspectiveCamera(GAMEPLAY_FOV, initialSize.w / initialSize.h, 0.35, 220);
+  camera.position.set(0, 10.2, 13.8);
+  camera.lookAt(0, 1.15, 2.0);
 
   let lastW = 0;
   let lastH = 0;
@@ -544,21 +546,21 @@
   );
   scene.add(skyDome);
 
-  // Balanced 4-Light Outdoor Rig: warm AmbientLight + moss-bounce Hemisphere + 2 shadow-casting DirectionalLights
-  const ambientLight = new THREE.AmbientLight(linCol(0xfff4e0), 0.36);
+  // Balanced 4-Light Outdoor PBR Rig: warm ambient + sky/moss hemisphere + dual shadow-casting directional lights
+  const ambientLight = new THREE.AmbientLight(linCol(0xfff5e4), 0.34);
   scene.add(ambientLight);
 
-  const hemiLight = new THREE.HemisphereLight(linCol(0xd4eeff), linCol(0x364d2b), 0.52);
+  const hemiLight = new THREE.HemisphereLight(linCol(0xd8f0ff), linCol(0x3a4d32), 0.56);
   scene.add(hemiLight);
 
-  const d = 22;
-  const sunLight = new THREE.DirectionalLight(linCol(0xfff1d6), 1.32);
+  const d = 24;
+  const sunLight = new THREE.DirectionalLight(linCol(0xfff1d6), 1.38);
   sunLight.position.set(16, 26, 14);
   sunLight.castShadow = true;
   sunLight.shadow.mapSize.width = 1024;
   sunLight.shadow.mapSize.height = 1024;
   sunLight.shadow.camera.near = 2;
-  sunLight.shadow.camera.far = 78;
+  sunLight.shadow.camera.far = 80;
   sunLight.shadow.camera.left = -d;
   sunLight.shadow.camera.right = d;
   sunLight.shadow.camera.top = d;
@@ -568,13 +570,13 @@
   scene.add(sunLight);
   scene.add(sunLight.target);
 
-  const rimLight = new THREE.DirectionalLight(linCol(0xbbe6ff), 0.44);
+  const rimLight = new THREE.DirectionalLight(linCol(0xaedcff), 0.50);
   rimLight.position.set(-14, 18, -16);
   rimLight.castShadow = true;
   rimLight.shadow.mapSize.width = 1024;
   rimLight.shadow.mapSize.height = 1024;
   rimLight.shadow.camera.near = 2;
-  rimLight.shadow.camera.far = 78;
+  rimLight.shadow.camera.far = 80;
   rimLight.shadow.camera.left = -d;
   rimLight.shadow.camera.right = d;
   rimLight.shadow.camera.top = d;
@@ -848,6 +850,105 @@
     }
   });
 
+  // Industrial Engineering Textures (panel seams/rivets, louvers, moving belt cleats, electrical cabinets)
+  const texPanelMetal = makeCanvasTex(256, 1, 1, true, (ctx, s) => {
+    const grad = ctx.createLinearGradient(0, 0, 0, s);
+    grad.addColorStop(0, "#dbe4ee");
+    grad.addColorStop(0.5, "#cbd5e1");
+    grad.addColorStop(1, "#94a3b8");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, s, s);
+    ctx.strokeStyle = "rgba(30, 41, 59, 0.38)";
+    ctx.lineWidth = 3;
+    ctx.strokeRect(4, 4, s - 8, s - 8);
+    ctx.strokeRect(4, s * 0.5, s - 8, 1);
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.32)";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(7, 7, s - 14, s - 14);
+    for (let i = 0; i < 90; i++) {
+      ctx.fillStyle = i % 2 === 0 ? "rgba(71, 85, 105, 0.08)" : "rgba(255, 255, 255, 0.07)";
+      ctx.fillRect(hash2(i, 91) * s, hash2(i, 92) * s, 14 + hash2(i, 93) * 26, 2);
+    }
+    [[16, 16], [s - 16, 16], [16, s - 16], [s - 16, s - 16], [s * 0.5, 16], [s * 0.5, s - 16]].forEach(([rx, ry]) => {
+      ctx.fillStyle = "#475569";
+      ctx.beginPath();
+      ctx.arc(rx, ry, 4.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#e2e8f0";
+      ctx.beginPath();
+      ctx.arc(rx - 1, ry - 1, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  });
+
+  const texVentLouvers = makeCanvasTex(128, 1, 1, true, (ctx, s) => {
+    ctx.fillStyle = "#b8c4d0";
+    ctx.fillRect(0, 0, s, s);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 4;
+    ctx.strokeRect(4, 4, s - 8, s - 8);
+    for (let y = 16; y < s - 14; y += 14) {
+      ctx.fillStyle = "#0f172a";
+      ctx.fillRect(14, y, s - 28, 7);
+      ctx.fillStyle = "#e2e8f0";
+      ctx.fillRect(14, y + 7, s - 28, 3);
+    }
+  });
+
+  const texConveyorBelt = makeCanvasTex(128, 1, 4, true, (ctx, s) => {
+    ctx.fillStyle = "#1c2430";
+    ctx.fillRect(0, 0, s, s);
+    for (let y = 0; y < s; y += 32) {
+      ctx.fillStyle = "#334155";
+      ctx.fillRect(8, y + 6, s - 16, 8);
+      ctx.fillStyle = "#0f172a";
+      ctx.fillRect(8, y + 14, s - 16, 4);
+      ctx.fillStyle = "#475569";
+      ctx.fillRect(4, y + 2, 6, 28);
+      ctx.fillRect(s - 10, y + 2, 6, 28);
+    }
+  });
+
+  const texControlCabinet = makeCanvasTex(128, 1, 1, true, (ctx, s) => {
+    ctx.fillStyle = "#2b6cb0";
+    ctx.fillRect(0, 0, s, s);
+    ctx.strokeStyle = "#1e3a5f";
+    ctx.lineWidth = 4;
+    ctx.strokeRect(4, 4, s - 8, s - 8);
+    ctx.fillStyle = "#0f172a";
+    ctx.fillRect(16, 16, s - 32, 34);
+    ctx.fillStyle = "#22d3ee";
+    ctx.fillRect(22, 24, 34, 10);
+    ctx.fillStyle = "#22c55e";
+    ctx.fillRect(64, 24, 14, 10);
+    ctx.fillStyle = "#f59e0b";
+    ctx.beginPath();
+    ctx.moveTo(s * 0.5, 62);
+    ctx.lineTo(s * 0.5 + 20, 96);
+    ctx.lineTo(s * 0.5 - 20, 96);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#0f172a";
+    ctx.fillRect(s * 0.5 - 2, 74, 4, 12);
+    ctx.fillRect(s * 0.5 - 2, 89, 4, 4);
+  });
+
+  const texContactShadow = (() => {
+    const c = document.createElement("canvas");
+    c.width = 128;
+    c.height = 128;
+    const ctx = c.getContext("2d");
+    const g = ctx.createRadialGradient(64, 64, 6, 64, 64, 62);
+    g.addColorStop(0, "rgba(4, 12, 8, 0.58)");
+    g.addColorStop(0.52, "rgba(4, 12, 8, 0.28)");
+    g.addColorStop(1, "rgba(4, 12, 8, 0.0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 128, 128);
+    const t = new THREE.CanvasTexture(c);
+    t.needsUpdate = true;
+    return t;
+  })();
+
   // Helper PBR & Unlit Materials (linearized sRGB hex colors for accurate r128 tone mapping)
   function pbrMat(color, opts) {
     const merged = Object.assign({
@@ -987,20 +1088,187 @@
   const gearWheelGeo = makeGearGeo(0.45, 0.34, 10, 0.14);
   const sawbladeGeo = makeSawbladeGeo(0.55, 16, 0.05);
 
-  const shadowDiscGeo = new THREE.CircleGeometry(1, 18);
-  const shadowDiscMat = basicMat(0x051009, {
+  const shadowDiscGeo = new THREE.PlaneGeometry(2.1, 2.1);
+  const shadowDiscMat = new THREE.MeshBasicMaterial({
+    map: texContactShadow,
     transparent: true,
-    opacity: 0.34,
+    opacity: 0.92,
     depthWrite: false
   });
 
   function addContactShadow(parent, radius) {
     const sh = new THREE.Mesh(shadowDiscGeo, shadowDiscMat);
     sh.rotation.x = -Math.PI / 2;
-    sh.position.y = 0.025;
+    sh.position.y = 0.024;
     sh.scale.set(radius, radius, 1);
     parent.add(sh);
     return sh;
+  }
+
+  // Shared Reusable Industrial Geometries & PBR Materials (optimized for mobile GPU batching)
+  const indFlangeGeo = new THREE.CylinderGeometry(0.145, 0.145, 0.055, 10);
+  const indBoltGeo = new THREE.CylinderGeometry(0.032, 0.032, 0.04, 6);
+  const indMotorGeo = new THREE.CylinderGeometry(0.19, 0.19, 0.44, 12);
+  indMotorGeo.rotateZ(Math.PI / 2);
+  const indTankEndGeo = new THREE.SphereGeometry(1, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.5);
+  const indPipeJointGeo = new THREE.SphereGeometry(1, 10, 8);
+  const indRailPostGeo = new THREE.CylinderGeometry(0.028, 0.028, 0.38, 6);
+  const indStepGeo = new THREE.BoxGeometry(0.28, 0.028, 0.045);
+
+  const indMats = {
+    steelDark: metalMat(0x273444, { map: texBrushedMetal, roughness: 0.44, metalness: 0.52 }),
+    steelMid: metalMat(0x526275, { map: texPanelMetal, roughness: 0.36, metalness: 0.55 }),
+    steelLight: metalMat(0xb8c5d4, { map: texPanelMetal, roughness: 0.3, metalness: 0.48 }),
+    chrome: metalMat(0xe2e8f0, { roughness: 0.18, metalness: 0.62 }),
+    panelWhite: pbrMat(0xe6edf5, { map: texPanelMetal, roughness: 0.42, metalness: 0.16 }),
+    panelBlue: pbrMat(0x1e6091, { map: texPanelMetal, roughness: 0.38, metalness: 0.25 }),
+    panelTeal: pbrMat(0x0f766e, { map: texPanelMetal, roughness: 0.4, metalness: 0.24 }),
+    safetyYellow: pbrMat(0xf59e0b, { roughness: 0.36, metalness: 0.22 }),
+    indOrange: pbrMat(0xea580c, { map: texPanelMetal, roughness: 0.38, metalness: 0.25 }),
+    copper: metalMat(0xd97706, { roughness: 0.26, metalness: 0.6 }),
+    brass: metalMat(0xfbbf24, { roughness: 0.24, metalness: 0.6 }),
+    rubberDark: pbrMat(0x181f29, { roughness: 0.88, metalness: 0.04 }),
+    vents: pbrMat(0xffffff, { map: texVentLouvers, roughness: 0.48, metalness: 0.3 }),
+    cabinet: pbrMat(0xffffff, { map: texControlCabinet, roughness: 0.42, metalness: 0.22 }),
+    beltMat: pbrMat(0xffffff, { map: texConveyorBelt, roughness: 0.84, metalness: 0.08 }),
+    glowCyan: pbrMat(0x67e8f9, { emissive: 0x06b6d4, emissiveIntensity: 0.9, roughness: 0.2 }),
+    glowAmber: pbrMat(0xfef08a, { emissive: 0xf59e0b, emissiveIntensity: 0.95, roughness: 0.2 }),
+    glowGreen: pbrMat(0x4ade80, { emissive: 0x16a34a, emissiveIntensity: 0.85, roughness: 0.25 }),
+    hazardDeck: pbrMat(0xffffff, { map: texHazard, roughness: 0.52, metalness: 0.18 })
+  };
+
+  const _boltDummy = new THREE.Object3D();
+  function addBoltsInstanced(parent, coords, mat) {
+    if (!coords || !coords.length) return null;
+    const im = new THREE.InstancedMesh(indBoltGeo, mat || indMats.chrome, coords.length);
+    for (let i = 0; i < coords.length; i++) {
+      const c = coords[i];
+      _boltDummy.position.set(c[0], c[1], c[2]);
+      _boltDummy.rotation.set(c[3] || 0, c[4] || 0, c[5] || 0);
+      _boltDummy.scale.setScalar(c[6] || 1);
+      _boltDummy.updateMatrix();
+      im.setMatrixAt(i, _boltDummy.matrix);
+    }
+    im.instanceMatrix.needsUpdate = true;
+    parent.add(im);
+    return im;
+  }
+
+  function addPipeRun(parent, pts, radius, mat, flangeMat) {
+    const curve = new THREE.CatmullRomCurve3(pts.map(([x, y, z]) => new THREE.Vector3(x, y, z)));
+    const pipe = new THREE.Mesh(
+      new THREE.TubeGeometry(curve, Math.max(8, pts.length * 4), radius, 8, false),
+      mat || indMats.steelLight
+    );
+    pipe.castShadow = true;
+    parent.add(pipe);
+    const flMat = flangeMat || indMats.steelDark;
+    const flScale = radius / 0.08;
+    for (let i = 0; i < pts.length; i++) {
+      const pt = pts[i];
+      const fl = new THREE.Mesh(indFlangeGeo, flMat);
+      fl.position.set(pt[0], pt[1], pt[2]);
+      fl.scale.set(flScale, 1, flScale);
+      if (i > 0) {
+        const prev = pts[i - 1];
+        const dx = pt[0] - prev[0], dy = pt[1] - prev[1], dz = pt[2] - prev[2];
+        if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) >= Math.abs(dz)) fl.rotation.z = Math.PI / 2;
+        else if (Math.abs(dz) > Math.abs(dy)) fl.rotation.x = Math.PI / 2;
+      } else if (pts.length > 1) {
+        const nxt = pts[1];
+        const dx = nxt[0] - pt[0], dy = nxt[1] - pt[1], dz = nxt[2] - pt[2];
+        if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) >= Math.abs(dz)) fl.rotation.z = Math.PI / 2;
+        else if (Math.abs(dz) > Math.abs(dy)) fl.rotation.x = Math.PI / 2;
+      }
+      parent.add(fl);
+    }
+    return pipe;
+  }
+
+  function addSafetyRail(parent, x1, z1, x2, z2, y, mat) {
+    const len = Math.hypot(x2 - x1, z2 - z1);
+    if (len < 0.1) return;
+    const rMat = mat || indMats.safetyYellow;
+    const ang = Math.atan2(x2 - x1, z2 - z1);
+    const posts = Math.max(2, Math.round(len / 0.6) + 1);
+    for (let i = 0; i < posts; i++) {
+      const t = i / (posts - 1);
+      const post = new THREE.Mesh(indRailPostGeo, rMat);
+      post.position.set(x1 + (x2 - x1) * t, y + 0.19, z1 + (z2 - z1) * t);
+      parent.add(post);
+    }
+    [0.18, 0.36].forEach((ry) => {
+      const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, len, 6), rMat);
+      bar.position.set((x1 + x2) * 0.5, y + ry, (z1 + z2) * 0.5);
+      bar.rotation.y = ang;
+      bar.rotation.x = Math.PI / 2;
+      parent.add(bar);
+    });
+  }
+
+  function addLadder(parent, x, y0, y1, z, rotY, mat) {
+    const lg = new THREE.Group();
+    lg.position.set(x, 0, z);
+    lg.rotation.y = rotY || 0;
+    const h = y1 - y0;
+    const lMat = mat || indMats.safetyYellow;
+    [-0.14, 0.14].forEach((sx) => {
+      const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, h, 6), lMat);
+      rail.position.set(sx, y0 + h * 0.5, 0);
+      lg.add(rail);
+    });
+    const steps = Math.max(3, Math.floor(h / 0.24));
+    for (let i = 0; i < steps; i++) {
+      const rung = new THREE.Mesh(indStepGeo, lMat);
+      rung.position.set(0, y0 + 0.14 + i * (h / steps), 0);
+      lg.add(rung);
+    }
+    parent.add(lg);
+    return lg;
+  }
+
+  function addMotorPod(parent, x, y, z, scale, mat) {
+    const mg = new THREE.Group();
+    mg.position.set(x, y, z);
+    mg.scale.setScalar(scale || 1);
+    const body = new THREE.Mesh(indMotorGeo, mat || indMats.panelBlue);
+    body.castShadow = true;
+    mg.add(body);
+    for (let f = -0.14; f <= 0.14; f += 0.07) {
+      const fin = new THREE.Mesh(new THREE.CylinderGeometry(0.215, 0.215, 0.022, 12), indMats.steelDark);
+      fin.rotation.z = Math.PI / 2;
+      fin.position.x = f;
+      mg.add(fin);
+    }
+    const jBox = new THREE.Mesh(makeRoundedBoxGeo(0.16, 0.12, 0.14, 0.02), indMats.steelDark);
+    jBox.position.set(0, 0.21, 0);
+    mg.add(jBox);
+    parent.add(mg);
+    return mg;
+  }
+
+  function addPressureTank(parent, x, y, z, r, len, horizontal, bodyMat, bandMat) {
+    const tg = new THREE.Group();
+    tg.position.set(x, y, z);
+    if (horizontal) tg.rotation.z = Math.PI / 2;
+    const cyl = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 12), bodyMat || indMats.panelWhite);
+    cyl.castShadow = true;
+    tg.add(cyl);
+    const topCap = new THREE.Mesh(indTankEndGeo, bandMat || indMats.steelLight);
+    topCap.scale.setScalar(r);
+    topCap.position.y = len * 0.5;
+    tg.add(topCap);
+    const botCap = new THREE.Mesh(indTankEndGeo, bandMat || indMats.steelLight);
+    botCap.scale.set(r, -r, r);
+    botCap.position.y = -len * 0.5;
+    tg.add(botCap);
+    [-len * 0.32, len * 0.32].forEach((by) => {
+      const strap = new THREE.Mesh(new THREE.CylinderGeometry(r * 1.045, r * 1.045, 0.055, 12), bandMat || indMats.indOrange);
+      strap.position.y = by;
+      tg.add(strap);
+    });
+    parent.add(tg);
+    return tg;
   }
 
   // Helper to build a wheeled rubber tire + metallic alloy rim
@@ -1544,14 +1812,17 @@
     biomeGates[b.id] = { biome: b, group: gGroup, barrier, padRing, charge: 0 };
   });
 
-  // Detailed World Buildings + Quad-Rotor Worker Drones
+  // Detailed World Buildings + Industrial Details + Quad-Rotor Worker Drones
   const worldBuildings = {};
   BUILDING_DEFS.forEach((def) => {
     const grp = new THREE.Group();
     grp.position.set(def.x, 0, def.z);
-    addContactShadow(grp, 2.1);
+    addContactShadow(grp, 2.25);
 
-    const padMesh = new THREE.Mesh(new THREE.CylinderGeometry(1.95, 2.08, 0.14, 24), pbrMat(0x64748b, { map: texBrushedMetal, roughness: 0.56 }));
+    const padMesh = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.98, 2.12, 0.14, 24),
+      indMats.steelMid
+    );
     padMesh.position.y = 0.06;
     padMesh.receiveShadow = true;
     grp.add(padMesh);
@@ -1567,34 +1838,61 @@
     const struct = new THREE.Group();
     struct.visible = false;
 
+    const hullColor = def.id === "smelter" ? 0x526275 : (def.id === "warehouse" ? 0x1e6091 : (def.id === "sawmill" ? 0xb45309 : 0x334155));
     const baseHull = new THREE.Mesh(
-      makeRoundedBoxGeo(2.2, 1.35, 2.2, 0.08),
-      pbrMat(def.id === "smelter" ? 0x64748b : (def.id === "warehouse" ? 0x2563eb : 0xc2711b), {
-        map: def.id === "sawmill" ? texWoodPlank : texBrushedMetal,
-        roughness: 0.5,
-        metalness: def.id === "sawmill" ? 0.12 : 0.4
+      makeRoundedBoxGeo(2.2, 1.38, 2.2, 0.08),
+      pbrMat(hullColor, {
+        map: def.id === "sawmill" ? texWoodPlank : texPanelMetal,
+        roughness: 0.45,
+        metalness: def.id === "sawmill" ? 0.14 : 0.36
       })
     );
-    baseHull.position.y = 0.78;
+    baseHull.position.y = 0.8;
     baseHull.castShadow = true;
+    baseHull.receiveShadow = true;
     struct.add(baseHull);
 
-    // Pitched industrial roof + exhaust chimney
+    // Side cooling louvers + bolted access door + side pressure tank
+    const louver = new THREE.Mesh(makeRoundedBoxGeo(0.08, 0.62, 0.82, 0.015), indMats.vents);
+    louver.position.set(1.11, 0.82, 0);
+    struct.add(louver);
+
+    const doorPanel = new THREE.Mesh(makeRoundedBoxGeo(0.76, 0.92, 0.08, 0.02), indMats.panelWhite);
+    doorPanel.position.set(0, 0.58, 1.1);
+    struct.add(doorPanel);
+
+    const doorLight = new THREE.Mesh(makeRoundedBoxGeo(0.62, 0.1, 0.1, 0.01), indMats.glowCyan);
+    doorLight.position.set(0, 1.12, 1.1);
+    struct.add(doorLight);
+
+    addPressureTank(struct, -1.26, 0.84, 0, 0.24, 0.82, false, indMats.panelWhite, indMats.safetyYellow);
+    addPipeRun(struct, [[-1.26, 1.36, 0], [-1.26, 1.55, 0], [-0.85, 1.55, 0]], 0.06, indMats.chrome);
+
+    // Upper steel catwalk rim + safety rail + pitched roof + flanged smokestack
+    const roofDeck = new THREE.Mesh(makeRoundedBoxGeo(2.44, 0.14, 2.44, 0.04), indMats.steelDark);
+    roofDeck.position.y = 1.54;
+    roofDeck.castShadow = true;
+    struct.add(roofDeck);
+    addSafetyRail(struct, -1.14, 1.14, 1.14, 1.14, 1.6, indMats.safetyYellow);
+    addSafetyRail(struct, -1.14, -1.14, -1.14, 1.14, 1.6, indMats.safetyYellow);
+    addLadder(struct, -1.14, 0.14, 1.6, 0.65, -Math.PI / 2, indMats.safetyYellow);
+
     const bRoof = new THREE.Mesh(
-      new THREE.ConeGeometry(1.75, 0.75, 4),
-      pbrMat(def.id === "smelter" ? 0xb91c1c : 0xd97706, { roughness: 0.52 })
+      new THREE.ConeGeometry(1.62, 0.68, 4),
+      pbrMat(def.id === "smelter" ? 0x991b1b : 0xd97706, { map: texPanelMetal, roughness: 0.48, metalness: 0.28 })
     );
     bRoof.rotation.y = Math.PI / 4;
-    bRoof.position.y = 1.82;
+    bRoof.position.y = 1.94;
     bRoof.castShadow = true;
     struct.add(bRoof);
 
-    const chimney = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.16, 0.22, 1.1, 10),
-      metalMat(0x64748b)
-    );
-    chimney.position.set(0.65, 1.9, -0.55);
+    const chimney = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.22, 1.15, 12), indMats.steelDark);
+    chimney.position.set(0.68, 2.04, -0.58);
+    chimney.castShadow = true;
     struct.add(chimney);
+    const chimneyRing = new THREE.Mesh(new THREE.CylinderGeometry(0.21, 0.21, 0.08, 12), indMats.indOrange);
+    chimneyRing.position.set(0.68, 2.5, -0.58);
+    struct.add(chimneyRing);
 
     const spinner = new THREE.Mesh(
       gearWheelGeo,
@@ -1605,19 +1903,21 @@
     );
     spinner.scale.setScalar(1.35);
     spinner.rotation.x = Math.PI / 2;
-    spinner.position.y = 2.38;
+    spinner.position.y = 2.42;
     spinner.castShadow = true;
     struct.add(spinner);
 
     // Modular Production Line Bays (max 3)
     const lineModules = [];
     for (let li = 0; li < 3; li++) {
-      const lm = new THREE.Mesh(
-        makeRoundedBoxGeo(0.75, 0.75, 0.75, 0.06),
-        metalMat(0xfbbf24, { roughness: 0.35, emissive: 0xd97706, emissiveIntensity: 0.15 })
-      );
+      const lm = new THREE.Group();
+      const pod = new THREE.Mesh(makeRoundedBoxGeo(0.76, 0.72, 0.76, 0.06), indMats.panelBlue);
+      pod.castShadow = true;
+      lm.add(pod);
+      const podVent = new THREE.Mesh(makeRoundedBoxGeo(0.54, 0.44, 0.78, 0.02), indMats.vents);
+      lm.add(podVent);
       const lang = li * (Math.PI * 2 / 3);
-      lm.position.set(Math.cos(lang) * 1.42, 0.48, Math.sin(lang) * 1.42);
+      lm.position.set(Math.cos(lang) * 1.46, 0.48, Math.sin(lang) * 1.46);
       lm.visible = false;
       struct.add(lm);
       lineModules.push(lm);
@@ -1636,7 +1936,7 @@
       eye.position.set(0, 0, 0.17);
       drone.add(eye);
       for (const [rx, rz] of [[-0.2, -0.2], [0.2, -0.2], [-0.2, 0.2], [0.2, 0.2]]) {
-        const rotor = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.02, 8), metalMat(0xe2e8f0));
+        const rotor = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.02, 8), indMats.chrome);
         rotor.position.set(rx, 0.1, rz);
         drone.add(rotor);
       }
@@ -1656,7 +1956,7 @@
   });
 
   // =========================================================================
-  // 8. DETAILED 3D INDUSTRIAL MACHINERY (10 MACHINES) & FLEET VEHICLES (5)
+  // 8. REALISTIC INDUSTRIAL MACHINERY (10 MACHINES) & FLEET VEHICLES (5)
   // =========================================================================
   const worldMachines = {};
   const machineSmoke = [];
@@ -1665,7 +1965,7 @@
     if (machineSmoke.length > 28) return;
     const m = new THREE.Mesh(
       makeOrganicGeo(0.22, 0, 0.15, wx),
-      pbrMat(col || 0xd1d5db, { transparent: true, opacity: 0.52, roughness: 0.95 })
+      pbrMat(col || 0xd1d5db, { transparent: true, opacity: 0.5, roughness: 0.95 })
     );
     m.position.set(wx + (Math.random() - 0.5) * 0.15, wy, wz + (Math.random() - 0.5) * 0.15);
     scene.add(m);
@@ -1676,20 +1976,24 @@
     const grp = new THREE.Group();
     grp.position.set(def.x, 0, def.z);
     grp.rotation.y = def.rotY;
-    addContactShadow(grp, def.id === "conveyor_belt" ? 2.6 : 1.7);
+    addContactShadow(grp, def.id === "conveyor_belt" ? 2.85 : 1.95);
 
-    // Subtle Blueprint Foundation Pad (visible when biome unlocked, machine not yet bought)
+    const isBelt = def.id === "conveyor_belt";
+    const padW = isBelt ? 2.15 : 2.55;
+    const padD = isBelt ? 5.8 : 2.55;
+
+    // Steel Diamond-Plate Foundation Pad with Hazard Perimeter
     const pad = new THREE.Mesh(
-      makeRoundedBoxGeo(def.id === "conveyor_belt" ? 2.0 : 2.3, 0.12, def.id === "conveyor_belt" ? 5.6 : 2.3, 0.04),
-      pbrMat(0x64748b, { map: texBrushedMetal, roughness: 0.58 })
+      makeRoundedBoxGeo(padW, 0.14, padD, 0.05),
+      indMats.steelDark
     );
-    pad.position.y = 0.06;
+    pad.position.y = 0.07;
     pad.receiveShadow = true;
     grp.add(pad);
 
     const hazardTrim = new THREE.Mesh(
-      new THREE.BoxGeometry(def.id === "conveyor_belt" ? 2.08 : 2.38, 0.08, def.id === "conveyor_belt" ? 5.68 : 2.38),
-      pbrMat(0xffffff, { map: texHazard, roughness: 0.5 })
+      new THREE.BoxGeometry(padW + 0.08, 0.08, padD + 0.08),
+      indMats.hazardDeck
     );
     hazardTrim.position.y = 0.045;
     grp.add(hazardTrim);
@@ -1698,228 +2002,581 @@
     rig.visible = false;
     grp.add(rig);
 
-    // Control Console + Glowing Status LED (Green = Running, Red = Paused)
-    const consoleBox = new THREE.Mesh(makeRoundedBoxGeo(0.42, 0.85, 0.36, 0.04), metalMat(0x475569));
-    consoleBox.position.set(-0.92, 0.52, 0.88);
-    rig.add(consoleBox);
+    // Industrial Electrical Breaker Cabinet + Telemetry Beacon
+    const cabinet = new THREE.Mesh(makeRoundedBoxGeo(0.42, 0.88, 0.36, 0.04), indMats.cabinet);
+    cabinet.position.set(isBelt ? -0.92 : -1.04, 0.56, isBelt ? 2.45 : 1.02);
+    cabinet.castShadow = true;
+    rig.add(cabinet);
+    const mastRod = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.32, 6), indMats.steelDark);
+    mastRod.position.set(cabinet.position.x, 1.12, cabinet.position.z);
+    rig.add(mastRod);
     const statusLed = new THREE.Mesh(sphereGeo, pbrMat(0x22c55e, { emissive: 0x22c55e, emissiveIntensity: 1.3 }));
-    statusLed.scale.setScalar(0.09);
-    statusLed.position.set(-0.92, 1.0, 0.92);
+    statusLed.scale.setScalar(0.095);
+    statusLed.position.set(cabinet.position.x, 1.30, cabinet.position.z);
     rig.add(statusLed);
 
-    const anim = { rotParts: [], pistons: [], crates: [], smokeOrigin: null };
+    const anim = { rotParts: [], pistons: [], crates: [], smokeOrigin: null, scrollBelt: false };
 
     if (def.id === "wood_cutter") {
-      const frame = new THREE.Mesh(makeRoundedBoxGeo(1.9, 0.72, 1.5, 0.05), metalMat(0xb45309));
-      frame.position.y = 0.48;
+      // 1. WOOD CUTTING MACHINE: Multi-tier saw deck + feed rollers + motor + cyclone dust hood
+      const deckBase = new THREE.Mesh(makeRoundedBoxGeo(2.1, 0.56, 1.68, 0.06), indMats.steelDark);
+      deckBase.position.y = 0.42;
+      deckBase.castShadow = true;
+      rig.add(deckBase);
+
+      const sawBed = new THREE.Mesh(makeRoundedBoxGeo(2.24, 0.14, 1.42, 0.03), indMats.steelLight);
+      sawBed.position.y = 0.78;
+      sawBed.receiveShadow = true;
+      rig.add(sawBed);
+
+      const sidePanel = new THREE.Mesh(makeRoundedBoxGeo(1.35, 0.54, 0.16, 0.03), indMats.indOrange);
+      sidePanel.position.set(0.15, 0.44, 0.82);
+      rig.add(sidePanel);
+      const vent = new THREE.Mesh(makeRoundedBoxGeo(0.65, 0.38, 0.06, 0.01), indMats.vents);
+      vent.position.set(0.2, 0.44, 0.91);
+      rig.add(vent);
+
+      // Articulated Left-Side Timber Feed Rollers
+      [-0.78, -0.78].forEach((rx, ri) => {
+        const ry = ri === 0 ? 0.95 : 1.24;
+        const bracket = new THREE.Mesh(makeRoundedBoxGeo(0.45, 0.1, 0.12, 0.02), indMats.steelLight);
+        bracket.position.set(rx, ry - 0.04, 0.58);
+        bracket.rotation.z = 0.25;
+        rig.add(bracket);
+        const rPivot = new THREE.Group();
+        rPivot.position.set(rx - 0.14, ry, 0);
+        const roller = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 1.05, 12), indMats.rubberDark);
+        roller.rotation.x = Math.PI / 2;
+        roller.castShadow = true;
+        rPivot.add(roller);
+        rig.add(rPivot);
+        anim.rotParts.push({ mesh: rPivot, axis: "z", speed: -4.2 });
+      });
+
+      // Overhead Bridge Arm + Motor Pod + Circular Sawblade + Safety Shroud
+      const gantryL = new THREE.Mesh(makeRoundedBoxGeo(0.2, 0.95, 0.22, 0.03), indMats.steelMid);
+      gantryL.position.set(0.1, 1.28, -0.62);
+      rig.add(gantryL);
+      const gantryTop = new THREE.Mesh(makeRoundedBoxGeo(0.32, 0.24, 1.28, 0.04), indMats.indOrange);
+      gantryTop.position.set(0.1, 1.72, -0.05);
+      gantryTop.castShadow = true;
+      rig.add(gantryTop);
+
+      addMotorPod(rig, 0.1, 1.72, -0.58, 0.88, indMats.panelBlue);
+
+      const bladeSpin = new THREE.Group();
+      bladeSpin.position.set(0.1, 1.15, 0.08);
+      bladeSpin.rotation.y = Math.PI / 2;
+      const blade = new THREE.Mesh(sawbladeGeo, indMats.chrome);
+      blade.scale.setScalar(1.08);
+      blade.castShadow = true;
+      bladeSpin.add(blade);
+      const arbor = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.12, 10), indMats.brass);
+      arbor.rotation.x = Math.PI / 2;
+      bladeSpin.add(arbor);
+      rig.add(bladeSpin);
+      anim.rotParts.push({ mesh: bladeSpin, axis: "z", speed: 10.5 });
+
+      const shroud = new THREE.Mesh(new THREE.TorusGeometry(0.56, 0.065, 8, 14, Math.PI), indMats.safetyYellow);
+      shroud.rotation.y = Math.PI / 2;
+      shroud.position.set(0.1, 1.17, 0.08);
+      rig.add(shroud);
+
+      // Curved Sawdust Extraction Pipe + Side Cyclone
+      const cyclone = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.09, 0.92, 12), indMats.panelWhite);
+      cyclone.position.set(0.86, 1.12, -0.58);
+      cyclone.castShadow = true;
+      rig.add(cyclone);
+      addPipeRun(rig, [[0.1, 1.62, 0.08], [0.46, 1.88, -0.25], [0.86, 1.48, -0.58]], 0.075, indMats.steelLight);
+      addSafetyRail(rig, -0.98, -0.78, 0.98, -0.78, 0.84, indMats.safetyYellow);
+      addBoltsInstanced(rig, [
+        [-0.95, 0.86, 0.62], [0.95, 0.86, 0.62], [-0.95, 0.86, -0.62], [0.95, 0.86, -0.62],
+        [0.1, 1.85, 0.45], [0.1, 1.85, -0.45]
+      ]);
+
+      const plankOut = createProductCrate(0xd97706, true);
+      plankOut.position.set(0.55, 0.94, 0.18);
+      rig.add(plankOut);
+      anim.crates.push({ mesh: plankOut, axis: "x", min: -0.45, max: 0.88, speed: 0.72 });
+
+    } else if (def.id === "stone_crusher") {
+      // 2. STONE CRUSHER: Reinforced Jaw Chassis + Hydraulic Pistons + Flywheel + Hopper
+      const frame = new THREE.Mesh(makeRoundedBoxGeo(2.08, 0.92, 1.88, 0.06), indMats.steelDark);
+      frame.position.y = 0.58;
       frame.castShadow = true;
       rig.add(frame);
-      const table = new THREE.Mesh(makeRoundedBoxGeo(2.05, 0.12, 1.3, 0.02), metalMat(0xcbd5e1));
-      table.position.y = 0.88;
-      rig.add(table);
-      const blade = new THREE.Mesh(sawbladeGeo, metalMat(0xe2e8f0, { metalness: 0.95, roughness: 0.18 }));
-      blade.rotation.y = Math.PI / 2;
-      blade.position.set(0, 1.06, 0);
-      blade.castShadow = true;
-      rig.add(blade);
-      anim.rotParts.push({ mesh: blade, axis: "x", speed: 9.5 });
-      const guard = new THREE.Mesh(new THREE.TorusGeometry(0.44, 0.06, 8, 14, Math.PI), metalMat(0xf59e0b));
-      guard.rotation.y = Math.PI / 2;
-      guard.position.set(0, 1.08, 0);
-      rig.add(guard);
-      const plankOut = createProductCrate(0xd97706, true);
-      plankOut.position.set(0.65, 1.02, 0.15);
-      rig.add(plankOut);
-      anim.crates.push({ mesh: plankOut, axis: "x", min: -0.6, max: 0.8, speed: 0.65 });
-    } else if (def.id === "stone_crusher") {
-      const chassis = new THREE.Mesh(makeRoundedBoxGeo(1.85, 1.0, 1.7, 0.06), metalMat(0x475569));
-      chassis.position.y = 0.62;
-      chassis.castShadow = true;
-      rig.add(chassis);
-      const hopper = new THREE.Mesh(new THREE.CylinderGeometry(0.92, 0.45, 0.75, 4), metalMat(0x64748b));
+
+      const armorPlate = new THREE.Mesh(makeRoundedBoxGeo(2.14, 0.58, 1.38, 0.04), indMats.panelWhite);
+      armorPlate.position.set(0, 0.62, 0);
+      rig.add(armorPlate);
+
+      const louverL = new THREE.Mesh(makeRoundedBoxGeo(0.06, 0.46, 0.88, 0.01), indMats.vents);
+      louverL.position.set(-1.08, 0.62, 0);
+      rig.add(louverL);
+      const louverR = louverL.clone();
+      louverR.position.x = 1.08;
+      rig.add(louverR);
+
+      // Flared Jaw Feed Hopper with Safety Yellow Rim
+      const hopper = new THREE.Mesh(new THREE.CylinderGeometry(0.96, 0.46, 0.74, 4), indMats.steelMid);
       hopper.rotation.y = Math.PI / 4;
-      hopper.position.y = 1.48;
+      hopper.position.y = 1.44;
+      hopper.castShadow = true;
       rig.add(hopper);
-      [-0.26, 0.26].forEach((ox, oi) => {
-        const roller = new THREE.Mesh(gearWheelGeo, metalMat(0xcbd5e1));
-        roller.scale.set(1.1, 1.1, 2.2);
-        roller.position.set(ox, 1.24, 0);
-        rig.add(roller);
-        anim.rotParts.push({ mesh: roller, axis: "z", speed: oi === 0 ? 5.2 : -5.2 });
+      const hopperRim = new THREE.Mesh(new THREE.CylinderGeometry(1.02, 0.96, 0.12, 4), indMats.safetyYellow);
+      hopperRim.rotation.y = Math.PI / 4;
+      hopperRim.position.y = 1.82;
+      rig.add(hopperRim);
+
+      // Counter-Rotating Toothed Crusher Rollers inside Throat + External Drive Flywheel
+      [-0.25, 0.25].forEach((ox, oi) => {
+        const rollPivot = new THREE.Group();
+        rollPivot.position.set(ox, 1.24, 0);
+        const roller = new THREE.Mesh(gearWheelGeo, indMats.chrome);
+        roller.scale.set(1.05, 1.05, 2.2);
+        rollPivot.add(roller);
+        rig.add(rollPivot);
+        anim.rotParts.push({ mesh: rollPivot, axis: "z", speed: oi === 0 ? 5.6 : -5.6 });
       });
-      const pistonArm = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.75, 10), metalMat(0xfbbf24));
-      pistonArm.position.set(0.75, 1.15, 0.5);
-      rig.add(pistonArm);
-      anim.pistons.push({ mesh: pistonArm, baseY: 1.15, amp: 0.24, speed: 6.0 });
+
+      const flywheelSpin = new THREE.Group();
+      flywheelSpin.position.set(1.12, 0.92, -0.2);
+      flywheelSpin.rotation.y = Math.PI / 2;
+      const fw = new THREE.Mesh(gearWheelGeo, indMats.brass);
+      fw.scale.setScalar(1.25);
+      fw.castShadow = true;
+      flywheelSpin.add(fw);
+      rig.add(flywheelSpin);
+      anim.rotParts.push({ mesh: flywheelSpin, axis: "z", speed: 4.8 });
+
+      addMotorPod(rig, -0.78, 1.24, -0.65, 0.85, indMats.panelBlue);
+
+      // Twin Hydraulic Crusher Cylinders + Chrome Rams
+      [[-0.74, 0.64], [0.74, 0.64]].forEach(([px, pz]) => {
+        const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.54, 10), indMats.safetyYellow);
+        sleeve.position.set(px, 0.94, pz);
+        rig.add(sleeve);
+        const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.065, 0.56, 10), indMats.chrome);
+        rod.position.set(px, 1.26, pz);
+        rig.add(rod);
+        anim.pistons.push({ mesh: rod, baseY: 1.26, amp: 0.18, speed: 6.4 });
+      });
+
+      addPipeRun(rig, [[-0.78, 1.44, -0.65], [0, 1.62, -0.82], [0.74, 1.15, -0.55]], 0.065, indMats.steelLight);
+      addLadder(rig, 1.08, 0.14, 1.12, 0.6, Math.PI / 2, indMats.safetyYellow);
+
       const block = createProductCrate(0x94a3b8, false);
       block.scale.setScalar(0.85);
-      block.position.set(-0.6, 0.45, 0.72);
+      block.position.set(0, 0.42, 0.84);
       rig.add(block);
-      anim.crates.push({ mesh: block, axis: "z", min: 0.25, max: 0.95, speed: 0.45 });
+      anim.crates.push({ mesh: block, axis: "z", min: 0.28, max: 1.04, speed: 0.48 });
+
     } else if (def.id === "conveyor_belt") {
-      for (const rz of [-2.3, 0, 2.3]) {
-        for (const rx of [-0.62, 0.62]) {
-          const leg = new THREE.Mesh(makeCapsuleGeo(0.08, 0.55, 8), metalMat(0x334155));
-          leg.position.set(rx, 0.32, rz);
+      // 3. CONVEYOR BELT: Truss Frame + Scrolling Cleated Belt + Rollers + Overhead Scanner Bridge
+      anim.scrollBelt = true;
+      for (const rz of [-2.4, -0.8, 0.8, 2.4]) {
+        for (const rx of [-0.72, 0.72]) {
+          const leg = new THREE.Mesh(makeCapsuleGeo(0.075, 0.56, 8), indMats.steelDark);
+          leg.position.set(rx, 0.36, rz);
+          leg.castShadow = true;
           rig.add(leg);
         }
+        const cross = new THREE.Mesh(makeRoundedBoxGeo(1.48, 0.08, 0.1, 0.02), indMats.steelMid);
+        cross.position.set(0, 0.45, rz);
+        rig.add(cross);
       }
-      const railL = new THREE.Mesh(makeRoundedBoxGeo(0.14, 0.22, 5.2, 0.03), metalMat(0x0284c7));
-      railL.position.set(-0.68, 0.72, 0);
-      rig.add(railL);
-      const railR = railL.clone();
-      railR.position.x = 0.68;
-      rig.add(railR);
-      const beltBed = new THREE.Mesh(makeRoundedBoxGeo(1.18, 0.14, 5.05, 0.03), pbrMat(0x1e293b, { roughness: 0.88 }));
-      beltBed.position.y = 0.68;
+      [-0.74, 0.74].forEach((rx) => {
+        const rail = new THREE.Mesh(makeRoundedBoxGeo(0.14, 0.24, 5.45, 0.03), indMats.panelBlue);
+        rail.position.set(rx, 0.74, 0);
+        rail.castShadow = true;
+        rig.add(rail);
+        const guide = new THREE.Mesh(makeRoundedBoxGeo(0.06, 0.12, 5.4, 0.01), indMats.safetyYellow);
+        guide.position.set(rx * 0.9, 0.9, 0);
+        rig.add(guide);
+      });
+      const beltBed = new THREE.Mesh(makeRoundedBoxGeo(1.24, 0.14, 5.25, 0.04), indMats.beltMat);
+      beltBed.position.y = 0.72;
       beltBed.receiveShadow = true;
       rig.add(beltBed);
-      for (let ri = -2.4; ri <= 2.4; ri += 1.2) {
-        const roller = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 1.24, 12), metalMat(0x94a3b8));
+
+      for (let ri = -2.5; ri <= 2.5; ri += 0.83) {
+        const rPivot = new THREE.Group();
+        rPivot.position.set(0, 0.68, ri);
+        const roller = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 1.32, 10), indMats.chrome);
         roller.rotation.z = Math.PI / 2;
-        roller.position.set(0, 0.66, ri);
-        rig.add(roller);
-        anim.rotParts.push({ mesh: roller, axis: "x", speed: 6.0 });
+        rPivot.add(roller);
+        rig.add(rPivot);
+        anim.rotParts.push({ mesh: rPivot, axis: "x", speed: 6.2 });
       }
+
+      // Overhead Scanner & Drive Gantry Arch
+      [-0.86, 0.86].forEach((gx) => {
+        const col = new THREE.Mesh(makeRoundedBoxGeo(0.2, 1.38, 0.42, 0.03), indMats.steelMid);
+        col.position.set(gx, 0.84, 0);
+        col.castShadow = true;
+        rig.add(col);
+      });
+      const bridge = new THREE.Mesh(makeRoundedBoxGeo(1.94, 0.34, 0.78, 0.05), indMats.panelWhite);
+      bridge.position.set(0, 1.62, 0);
+      bridge.castShadow = true;
+      rig.add(bridge);
+      const scanGlow = new THREE.Mesh(makeRoundedBoxGeo(1.25, 0.08, 0.18, 0.01), indMats.glowCyan);
+      scanGlow.position.set(0, 1.44, 0);
+      rig.add(scanGlow);
+      addMotorPod(rig, 0.62, 1.94, 0, 0.82, indMats.panelBlue);
+      addSafetyRail(rig, -0.9, -0.34, 0.9, -0.34, 1.78, indMats.safetyYellow);
+      addLadder(rig, 0.96, 0.14, 1.78, 0, Math.PI / 2, indMats.safetyYellow);
+
       [0xd97706, 0xcbd5e1, 0xfbbf24, 0x22d3ee].forEach((cCol, ci) => {
         const cr = createProductCrate(cCol, ci % 2 === 1);
-        cr.position.set(0, 0.92, -2.0 + ci * 1.2);
+        cr.position.set(0, 0.94, -2.1 + ci * 1.35);
         rig.add(cr);
-        anim.crates.push({ mesh: cr, axis: "z", min: -2.2, max: 2.2, speed: 1.1 });
+        anim.crates.push({ mesh: cr, axis: "z", min: -2.35, max: 2.35, speed: 1.15 });
       });
+
     } else if (def.id === "sawmill_machine") {
-      const bay = new THREE.Mesh(makeRoundedBoxGeo(2.0, 1.35, 1.6, 0.06), metalMat(0x92400e, { map: texWoodPlank, metalness: 0.25 }));
-      bay.position.y = 0.78;
+      // 4. AUTOMATED SAWMILL: Multi-level White/Blue/Timber Bay + Twin Band-Saw Flywheels + Cyclone Tank
+      const bay = new THREE.Mesh(makeRoundedBoxGeo(2.08, 1.26, 1.72, 0.07), indMats.panelBlue);
+      bay.position.y = 0.76;
       bay.castShadow = true;
       rig.add(bay);
-      [-0.55, 0.55].forEach((fx) => {
-        const fw = new THREE.Mesh(gearWheelGeo, metalMat(0xf59e0b));
-        fw.scale.setScalar(1.1);
-        fw.position.set(fx, 1.55, 0);
-        rig.add(fw);
-        anim.rotParts.push({ mesh: fw, axis: "z", speed: 5.5 });
+
+      const lowerWoodPod = new THREE.Mesh(makeRoundedBoxGeo(1.1, 0.78, 0.56, 0.06), indMats.panelWhite);
+      lowerWoodPod.position.set(-0.35, 0.52, 0.88);
+      lowerWoodPod.castShadow = true;
+      rig.add(lowerWoodPod);
+      const podVent = new THREE.Mesh(makeRoundedBoxGeo(0.75, 0.48, 0.05, 0.01), indMats.vents);
+      podVent.position.set(-0.35, 0.54, 1.16);
+      rig.add(podVent);
+
+      const catwalk = new THREE.Mesh(makeRoundedBoxGeo(2.26, 0.12, 1.92, 0.04), indMats.steelDark);
+      catwalk.position.y = 1.44;
+      catwalk.castShadow = true;
+      rig.add(catwalk);
+      addSafetyRail(rig, -1.06, 0.88, 1.06, 0.88, 1.5, indMats.safetyYellow);
+      addSafetyRail(rig, -1.06, -0.88, -1.06, 0.88, 1.5, indMats.safetyYellow);
+      addLadder(rig, 1.12, 0.14, 1.5, 0.45, Math.PI / 2, indMats.safetyYellow);
+
+      // Twin Exposed Overhead Band-Saw Flywheels
+      [-0.58, 0.42].forEach((fx) => {
+        const fwSpin = new THREE.Group();
+        fwSpin.position.set(fx, 1.92, 0.12);
+        const fw = new THREE.Mesh(gearWheelGeo, indMats.safetyYellow);
+        fw.scale.setScalar(1.06);
+        fw.castShadow = true;
+        fwSpin.add(fw);
+        rig.add(fwSpin);
+        anim.rotParts.push({ mesh: fwSpin, axis: "z", speed: 6.0 });
       });
+      const sawBand = new THREE.Mesh(makeRoundedBoxGeo(1.08, 0.06, 0.1, 0.01), indMats.chrome);
+      sawBand.position.set(-0.08, 2.24, 0.12);
+      rig.add(sawBand);
+
+      addPressureTank(rig, 0.82, 1.24, -0.68, 0.3, 1.15, false, indMats.copper, indMats.steelDark);
+      addPipeRun(rig, [[-0.55, 1.92, -0.35], [0.15, 2.22, -0.68], [0.82, 1.88, -0.68]], 0.08, indMats.steelLight);
+      addMotorPod(rig, -0.1, 1.66, -0.52, 0.82, indMats.indOrange);
+
       const crateOut = createProductCrate(0xf59e0b, false);
-      crateOut.position.set(0.55, 0.9, 0.85);
+      crateOut.position.set(0.62, 0.9, 0.92);
       rig.add(crateOut);
-      anim.crates.push({ mesh: crateOut, axis: "z", min: 0.2, max: 0.95, speed: 0.55 });
+      anim.crates.push({ mesh: crateOut, axis: "z", min: 0.35, max: 1.08, speed: 0.55 });
+
     } else if (def.id === "auto_miner_machine") {
-      // Tripod Gantry + Helical Rotary Drill Auger
-      [[-0.75, -0.7], [0.75, -0.7], [0, 0.8]].forEach(([tx, tz]) => {
-        const strut = new THREE.Mesh(makeCapsuleGeo(0.08, 1.9, 8), metalMat(0x059669));
-        strut.position.set(tx * 0.65, 1.05, tz * 0.65);
-        strut.lookAt(0, 2.1, 0);
-        rig.add(strut);
+      // 5. AUTOMATIC MINING MACHINE: Steel Derrick Tower + Diesel Pod + Hydraulic Hoses + Helical Auger
+      const deck = new THREE.Mesh(makeRoundedBoxGeo(2.15, 0.36, 2.05, 0.05), indMats.steelDark);
+      deck.position.y = 0.32;
+      deck.castShadow = true;
+      rig.add(deck);
+
+      // 4 Tapered Derrick Truss Columns + Top Crown Block
+      [[-0.78, -0.78], [0.78, -0.78], [-0.78, 0.78], [0.78, 0.78]].forEach(([tx, tz]) => {
+        const leg = new THREE.Mesh(makeCapsuleGeo(0.065, 2.25, 8), indMats.panelTeal);
+        leg.position.set(tx * 0.72, 1.52, tz * 0.72);
+        leg.lookAt(tx * 0.32, 2.75, tz * 0.32);
+        leg.rotateX(Math.PI / 2);
+        leg.castShadow = true;
+        rig.add(leg);
       });
+      const crown = new THREE.Mesh(makeRoundedBoxGeo(0.95, 0.24, 0.95, 0.04), indMats.safetyYellow);
+      crown.position.y = 2.68;
+      crown.castShadow = true;
+      rig.add(crown);
+
+      // Diesel Generator Pod with Cooling Louvers & Exhaust Stack
+      const genPod = new THREE.Mesh(makeRoundedBoxGeo(0.75, 0.78, 1.15, 0.05), indMats.panelWhite);
+      genPod.position.set(0.75, 0.84, -0.35);
+      genPod.castShadow = true;
+      rig.add(genPod);
+      const genVent = new THREE.Mesh(makeRoundedBoxGeo(0.06, 0.48, 0.72, 0.01), indMats.vents);
+      genVent.position.set(1.13, 0.84, -0.35);
+      rig.add(genVent);
+      addPipeRun(rig, [[0.75, 1.24, -0.55], [0.75, 1.78, -0.55], [0.42, 1.98, -0.35]], 0.055, indMats.rubberDark);
+      addLadder(rig, -0.82, 0.48, 2.55, 0, -Math.PI / 2, indMats.safetyYellow);
+
+      // Reciprocating Rotary Kelly-Drive Auger
       const augerGroup = new THREE.Group();
-      augerGroup.position.set(0, 1.15, 0);
-      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.04, 1.55, 12), metalMat(0xe2e8f0));
+      augerGroup.position.set(0, 1.24, 0);
+      const driveBox = new THREE.Mesh(makeRoundedBoxGeo(0.46, 0.34, 0.46, 0.04), indMats.panelBlue);
+      driveBox.position.y = 0.75;
+      augerGroup.add(driveBox);
+      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.045, 1.65, 12), indMats.chrome);
+      shaft.castShadow = true;
       augerGroup.add(shaft);
-      for (let hi = 0; hi < 5; hi++) {
-        const fin = new THREE.Mesh(new THREE.CylinderGeometry(0.36 - hi * 0.05, 0.36 - hi * 0.05, 0.06, 10), metalMat(0xfbbf24));
-        fin.position.y = 0.55 - hi * 0.28;
+      for (let hi = 0; hi < 6; hi++) {
+        const fin = new THREE.Mesh(new THREE.CylinderGeometry(0.38 - hi * 0.045, 0.38 - hi * 0.045, 0.055, 10), indMats.brass);
+        fin.position.y = 0.54 - hi * 0.24;
         fin.rotation.x = 0.26;
         fin.rotation.y = hi * 0.9;
         augerGroup.add(fin);
       }
       rig.add(augerGroup);
-      anim.rotParts.push({ mesh: augerGroup, axis: "y", speed: 7.5 });
-      anim.pistons.push({ mesh: augerGroup, baseY: 1.12, amp: 0.16, speed: 3.8 });
+      anim.rotParts.push({ mesh: augerGroup, axis: "y", speed: 8.0 });
+      anim.pistons.push({ mesh: augerGroup, baseY: 1.22, amp: 0.22, speed: 3.8 });
+
     } else if (def.id === "ore_processor") {
-      // Inclined Rotary Trommel Drum + Sifting Hopper
-      const stand = new THREE.Mesh(makeRoundedBoxGeo(1.9, 0.5, 1.5, 0.04), metalMat(0x334155));
-      stand.position.y = 0.35;
+      // 6. ORE PROCESSING MACHINE: Stepped Frame + Rotary Trommel Drum + Spray Manifold + Slurry Tank
+      const stand = new THREE.Mesh(makeRoundedBoxGeo(2.1, 0.54, 1.72, 0.05), indMats.steelDark);
+      stand.position.y = 0.38;
+      stand.castShadow = true;
       rig.add(stand);
-      const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 1.55, 14), metalMat(0xfb923c, { map: texBrushedMetal }));
-      drum.rotation.z = Math.PI / 2 - 0.18;
-      drum.position.set(0, 1.1, 0);
-      drum.castShadow = true;
-      rig.add(drum);
-      anim.rotParts.push({ mesh: drum, axis: "x", speed: 4.5 });
-      const conc = createProductCrate(0xea580c, true);
-      conc.position.set(0.6, 0.65, 0.55);
-      rig.add(conc);
-      anim.crates.push({ mesh: conc, axis: "x", min: -0.4, max: 0.75, speed: 0.5 });
-    } else if (def.id === "smelting_furnace") {
-      // Blast Furnace + Glowing Molten Crucible + Smokestack + Ingot Bars
-      const base = new THREE.Mesh(new THREE.CylinderGeometry(0.88, 1.05, 1.55, 12), pbrMat(0x7f1d1d, { map: texCobble, roughness: 0.85 }));
-      base.position.y = 0.85;
-      base.castShadow = true;
-      rig.add(base);
-      const stack = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.42, 1.4, 12), metalMat(0x1e293b));
-      stack.position.set(-0.25, 2.05, -0.2);
-      rig.add(stack);
-      const hearth = new THREE.Mesh(sphereGeo, pbrMat(0xff6b00, { emissive: 0xff4500, emissiveIntensity: 1.4, roughness: 0.2 }));
-      hearth.scale.set(0.45, 0.38, 0.28);
-      hearth.position.set(0, 0.58, 0.88);
-      rig.add(hearth);
-      const bar = createProductCrate(0x94a3b8, true);
-      bar.position.set(0.68, 0.35, 0.85);
-      rig.add(bar);
-      anim.crates.push({ mesh: bar, axis: "z", min: 0.45, max: 1.0, speed: 0.4 });
-      anim.smokeOrigin = { lx: -0.25, ly: 2.85, lz: -0.2, col: 0x9ca3af };
-    } else if (def.id === "gold_refinery") {
-      // Pressurized Twin Copper Reaction Tanks + TubeGeometry Conduit + Gold Centrifuge
-      [-0.55, 0.55].forEach((tx) => {
-        const tank = new THREE.Mesh(makeCapsuleGeo(0.36, 1.15, 14), metalMat(0xd97706, { roughness: 0.24, metalness: 0.9 }));
-        tank.position.set(tx, 0.95, -0.2);
-        tank.castShadow = true;
-        rig.add(tank);
+
+      const catwalk = new THREE.Mesh(makeRoundedBoxGeo(2.15, 0.1, 0.65, 0.03), indMats.steelMid);
+      catwalk.position.set(0, 1.38, -0.64);
+      rig.add(catwalk);
+      addSafetyRail(rig, -1.0, -0.92, 1.0, -0.92, 1.44, indMats.safetyYellow);
+      addLadder(rig, -1.04, 0.14, 1.44, -0.64, -Math.PI / 2, indMats.safetyYellow);
+
+      // Inclined Rotary Trommel Drum with Steel Tyre Bands & Ring Gear
+      const drumMount = new THREE.Group();
+      drumMount.position.set(0, 1.12, 0.12);
+      drumMount.rotation.z = -0.18;
+      const drumSpin = new THREE.Group();
+      const drumBody = new THREE.Mesh(new THREE.CylinderGeometry(0.56, 0.56, 1.65, 14), indMats.indOrange);
+      drumBody.rotation.z = Math.PI / 2;
+      drumBody.castShadow = true;
+      drumSpin.add(drumBody);
+      [-0.54, 0, 0.54].forEach((bx, bi) => {
+        const ring = new THREE.Mesh(
+          new THREE.CylinderGeometry(bi === 1 ? 0.62 : 0.59, bi === 1 ? 0.62 : 0.59, 0.1, 14),
+          bi === 1 ? indMats.safetyYellow : indMats.chrome
+        );
+        ring.rotation.z = Math.PI / 2;
+        ring.position.x = bx;
+        drumSpin.add(ring);
       });
-      const pipeCurve = new THREE.CatmullRomCurve3([new THREE.Vector3(-0.55, 1.6, -0.2), new THREE.Vector3(0, 1.95, 0.25), new THREE.Vector3(0.55, 1.6, -0.2)]);
-      const pipe = new THREE.Mesh(new THREE.TubeGeometry(pipeCurve, 12, 0.08, 8, false), metalMat(0xfde047));
-      rig.add(pipe);
-      const rotor = new THREE.Mesh(gearWheelGeo, metalMat(0xfbbf24, { emissive: 0xd97706, emissiveIntensity: 0.3 }));
-      rotor.rotation.x = Math.PI / 2;
-      rotor.position.set(0, 0.92, 0.52);
-      rig.add(rotor);
-      anim.rotParts.push({ mesh: rotor, axis: "y", speed: 6.5 });
+      drumMount.add(drumSpin);
+      rig.add(drumMount);
+      anim.rotParts.push({ mesh: drumSpin, axis: "x", speed: 4.5 });
+
+      addPressureTank(rig, -0.82, 1.15, 0.62, 0.25, 0.9, false, indMats.panelBlue, indMats.chrome);
+      addPipeRun(rig, [[-0.82, 1.68, 0.62], [-0.45, 1.92, 0.12], [0.65, 1.75, 0.12]], 0.06, indMats.chrome);
+      addMotorPod(rig, 0.68, 0.82, -0.58, 0.85, indMats.panelBlue);
+
+      const conc = createProductCrate(0xea580c, true);
+      conc.position.set(0.65, 0.68, 0.62);
+      rig.add(conc);
+      anim.crates.push({ mesh: conc, axis: "x", min: -0.35, max: 0.85, speed: 0.52 });
+
+    } else if (def.id === "smelting_furnace") {
+      // 7. SMELTING FURNACE: Banded Blast Furnace + Preheater Stoves + Hot-Blast Conduits + Stack
+      const vessel = new THREE.Mesh(new THREE.CylinderGeometry(0.84, 1.02, 1.62, 14), pbrMat(0x6b211a, { map: texCobble, roughness: 0.78 }));
+      vessel.position.set(-0.15, 0.92, 0);
+      vessel.castShadow = true;
+      rig.add(vessel);
+
+      [0.45, 1.05, 1.62].forEach((ry) => {
+        const band = new THREE.Mesh(new THREE.CylinderGeometry(0.95 - ry * 0.05, 0.95 - ry * 0.05, 0.09, 14), indMats.steelDark);
+        band.position.set(-0.15, ry, 0);
+        rig.add(band);
+      });
+
+      const dome = new THREE.Mesh(indTankEndGeo, indMats.steelMid);
+      dome.scale.set(0.84, 0.55, 0.84);
+      dome.position.set(-0.15, 1.72, 0);
+      rig.add(dome);
+
+      // Glowing Molten Crucible Hearth & Cast-Iron Frame
+      const hearthArch = new THREE.Mesh(makeRoundedBoxGeo(0.76, 0.68, 0.34, 0.04), indMats.steelDark);
+      hearthArch.position.set(-0.15, 0.52, 0.86);
+      rig.add(hearthArch);
+      const hearth = new THREE.Mesh(sphereGeo, pbrMat(0xff6b00, { emissive: 0xff4500, emissiveIntensity: 1.45, roughness: 0.18 }));
+      hearth.scale.set(0.32, 0.28, 0.22);
+      hearth.position.set(-0.15, 0.52, 0.96);
+      rig.add(hearth);
+
+      // Hot-Blast Preheater Stove + Tall Flanged Smokestack
+      addPressureTank(rig, 0.86, 0.92, -0.35, 0.32, 1.22, false, indMats.panelWhite, indMats.indOrange);
+      const stack = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.36, 1.65, 12), indMats.steelDark);
+      stack.position.set(-0.35, 2.28, -0.35);
+      stack.castShadow = true;
+      rig.add(stack);
+      const stackCollar = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.26, 0.12, 12), indMats.indOrange);
+      stackCollar.position.set(-0.35, 3.08, -0.35);
+      rig.add(stackCollar);
+
+      addPipeRun(rig, [[0.86, 1.62, -0.35], [0.45, 2.02, -0.15], [-0.15, 1.92, 0]], 0.08, indMats.copper);
+      addLadder(rig, 0.86, 0.14, 1.48, 0.05, 0, indMats.safetyYellow);
+      addBoltsInstanced(rig, [
+        [-0.48, 0.82, 0.88], [0.18, 0.82, 0.88], [-0.48, 0.26, 0.88], [0.18, 0.26, 0.88]
+      ]);
+
+      const bar = createProductCrate(0x94a3b8, true);
+      bar.position.set(0.55, 0.36, 0.88);
+      rig.add(bar);
+      anim.crates.push({ mesh: bar, axis: "z", min: 0.52, max: 1.05, speed: 0.42 });
+      anim.smokeOrigin = { lx: -0.35, ly: 3.22, lz: -0.35, col: 0x9ca3af };
+
+    } else if (def.id === "gold_refinery") {
+      // 8. GOLD REFINERY (Ref 1 inspired!): Domed Reactor Vat + Pressurized Horizontal Tanks + Cyan Sight Conduits + Catwalk
+      const lowerDeck = new THREE.Mesh(makeRoundedBoxGeo(2.26, 0.46, 2.08, 0.06), indMats.steelDark);
+      lowerDeck.position.y = 0.36;
+      lowerDeck.castShadow = true;
+      rig.add(lowerDeck);
+
+      // Twin Pressurized Horizontal Tanks with Hemispherical Caps & Orange Straps
+      addPressureTank(rig, -0.78, 0.82, 0.2, 0.28, 0.92, true, indMats.panelWhite, indMats.indOrange);
+      addPressureTank(rig, 0.78, 0.82, 0.2, 0.28, 0.92, true, indMats.copper, indMats.safetyYellow);
+
+      // Upper Catwalk Platform & Safety Railings
+      const catwalk = new THREE.Mesh(makeRoundedBoxGeo(2.1, 0.12, 1.75, 0.05), indMats.steelMid);
+      catwalk.position.set(0, 1.26, -0.15);
+      catwalk.castShadow = true;
+      rig.add(catwalk);
+      addSafetyRail(rig, -0.98, 0.68, 0.98, 0.68, 1.32, indMats.safetyYellow);
+      addSafetyRail(rig, 0.98, -0.95, 0.98, 0.68, 1.32, indMats.safetyYellow);
+      addLadder(rig, 1.04, 0.14, 1.32, -0.15, Math.PI / 2, indMats.safetyYellow);
+
+      // Central Domed Reactor Vessel + Cyan Glowing Conduit Rings
+      const vat = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.68, 0.98, 14), indMats.panelWhite);
+      vat.position.set(0, 1.78, -0.2);
+      vat.castShadow = true;
+      rig.add(vat);
+      const vatDome = new THREE.Mesh(indTankEndGeo, indMats.steelLight);
+      vatDome.scale.set(0.62, 0.44, 0.62);
+      vatDome.position.set(0, 2.26, -0.2);
+      rig.add(vatDome);
+      const cyanBand = new THREE.Mesh(new THREE.TorusGeometry(0.65, 0.048, 8, 20), indMats.glowCyan);
+      cyanBand.rotation.x = Math.PI / 2;
+      cyanBand.position.set(0, 1.62, -0.2);
+      rig.add(cyanBand);
+
+      addPipeRun(rig, [[-0.78, 1.12, 0.2], [-0.78, 1.92, -0.2], [0, 2.52, -0.2]], 0.075, indMats.panelWhite);
+      addPipeRun(rig, [[0.78, 1.12, 0.2], [0.78, 1.85, 0.05], [0.58, 1.85, -0.2]], 0.065, indMats.brass);
+
+      const rotorPivot = new THREE.Group();
+      rotorPivot.position.set(0, 0.92, 0.62);
+      const rotor = new THREE.Mesh(gearWheelGeo, indMats.brass);
+      rotor.castShadow = true;
+      rotorPivot.add(rotor);
+      rig.add(rotorPivot);
+      anim.rotParts.push({ mesh: rotorPivot, axis: "z", speed: 6.5 });
+
       const goldBar = createProductCrate(0xfde047, true);
-      goldBar.position.set(0, 0.38, 0.88);
+      goldBar.position.set(0, 0.66, 0.88);
       rig.add(goldBar);
+      anim.smokeOrigin = { lx: 0, ly: 2.75, lz: -0.2, col: 0xfef08a };
+
     } else if (def.id === "crystal_processor") {
-      // Precision White/Titanium Pedestal + Twin Gimballed Laser Rings + Hovering Prism
-      const ped = new THREE.Mesh(new THREE.CylinderGeometry(0.82, 0.95, 0.55, 16), metalMat(0xe2e8f0, { roughness: 0.25 }));
-      ped.position.y = 0.38;
-      rig.add(ped);
-      const ringA = new THREE.Mesh(new THREE.TorusGeometry(0.75, 0.055, 10, 28), metalMat(0x22d3ee, { emissive: 0x06b6d4, emissiveIntensity: 0.6 }));
-      ringA.position.y = 1.4;
+      // 9. CRYSTAL PROCESSOR (Ref 2 inspired!): Clean Titanium Cooling Bay + Cryo Tank + Laser Gimbals
+      const baseBay = new THREE.Mesh(makeRoundedBoxGeo(2.04, 0.68, 1.84, 0.07), indMats.panelBlue);
+      baseBay.position.y = 0.46;
+      baseBay.castShadow = true;
+      rig.add(baseBay);
+
+      const coolPod = new THREE.Mesh(makeRoundedBoxGeo(0.88, 0.64, 0.72, 0.08), indMats.panelWhite);
+      coolPod.position.set(0.42, 0.44, 0.84);
+      coolPod.castShadow = true;
+      rig.add(coolPod);
+      const coolVent = new THREE.Mesh(makeRoundedBoxGeo(0.56, 0.38, 0.05, 0.01), indMats.vents);
+      coolVent.position.set(0.42, 0.46, 1.2);
+      rig.add(coolVent);
+      const podLight = new THREE.Mesh(makeRoundedBoxGeo(0.18, 0.34, 0.06, 0.01), indMats.glowCyan);
+      podLight.position.set(0.02, 0.42, 1.18);
+      rig.add(podLight);
+
+      const deckTop = new THREE.Mesh(makeRoundedBoxGeo(2.14, 0.12, 1.94, 0.04), indMats.steelDark);
+      deckTop.position.y = 0.86;
+      rig.add(deckTop);
+      addSafetyRail(rig, -0.96, -0.88, 0.96, -0.88, 0.92, indMats.safetyYellow);
+      addLadder(rig, 1.04, 0.14, 0.92, -0.35, Math.PI / 2, indMats.safetyYellow);
+      addPressureTank(rig, -0.78, 1.32, -0.62, 0.22, 0.84, true, indMats.panelWhite, indMats.indOrange);
+      addPipeRun(rig, [[-0.45, 1.32, -0.62], [-0.15, 1.32, -0.32], [0, 1.12, 0]], 0.055, indMats.chrome);
+
+      // Twin Counter-Rotating Gimballed Laser Rings + Central Levitating Prism
+      const ringA = new THREE.Mesh(new THREE.TorusGeometry(0.68, 0.052, 10, 24), indMats.glowCyan);
+      ringA.position.y = 1.62;
       rig.add(ringA);
-      const ringB = ringA.clone();
-      ringB.scale.setScalar(0.78);
+      const ringB = new THREE.Mesh(new THREE.TorusGeometry(0.52, 0.044, 10, 22), indMats.brass);
+      ringB.position.y = 1.62;
       ringB.rotation.y = Math.PI / 2;
       rig.add(ringB);
       anim.rotParts.push({ mesh: ringA, axis: "x", speed: 2.6 });
       anim.rotParts.push({ mesh: ringB, axis: "y", speed: 3.4 });
-      const gem = new THREE.Mesh(crystalPrismGeo, pbrMat(0x67e8f9, { emissive: 0x22d3ee, emissiveIntensity: 0.75, roughness: 0.12, metalness: 0.2 }));
-      gem.scale.setScalar(0.65);
-      gem.position.y = 1.4;
+
+      const gem = new THREE.Mesh(crystalPrismGeo, pbrMat(0x67e8f9, { emissive: 0x22d3ee, emissiveIntensity: 0.78, roughness: 0.12, metalness: 0.22 }));
+      gem.scale.setScalar(0.62);
+      gem.position.y = 1.62;
       rig.add(gem);
       anim.rotParts.push({ mesh: gem, axis: "y", speed: 2.0 });
+
     } else {
-      // Industrial Factory: Bay Hull + Dual Articulated Robotic Assembly Arms
-      const bay = new THREE.Mesh(makeRoundedBoxGeo(2.2, 1.15, 2.0, 0.07), metalMat(0x475569));
-      bay.position.y = 0.68;
+      // 10. INDUSTRIAL FACTORY: Multi-Tier Complex + Twin Reactor Tanks + Smokestacks + Robotic Assembly Arms
+      const bay = new THREE.Mesh(makeRoundedBoxGeo(2.28, 1.08, 2.08, 0.08), indMats.panelBlue);
+      bay.position.y = 0.66;
       bay.castShadow = true;
       rig.add(bay);
-      const glowStrip = new THREE.Mesh(makeRoundedBoxGeo(2.24, 0.12, 2.04, 0.02), pbrMat(0xe879f9, { emissive: 0xe879f9, emissiveIntensity: 0.9 }));
-      glowStrip.position.y = 1.18;
+
+      const frontModule = new THREE.Mesh(makeRoundedBoxGeo(1.06, 0.72, 0.68, 0.08), indMats.panelWhite);
+      frontModule.position.set(0.45, 0.5, 1.04);
+      frontModule.castShadow = true;
+      rig.add(frontModule);
+      const frontVent = new THREE.Mesh(makeRoundedBoxGeo(0.72, 0.44, 0.05, 0.01), indMats.vents);
+      frontVent.position.set(0.45, 0.52, 1.38);
+      rig.add(frontVent);
+      const glowStrip = new THREE.Mesh(makeRoundedBoxGeo(2.32, 0.1, 2.12, 0.02), indMats.glowCyan);
+      glowStrip.position.y = 1.12;
       rig.add(glowStrip);
-      [-0.55, 0.55].forEach((ax, ai) => {
+
+      const upperDeck = new THREE.Mesh(makeRoundedBoxGeo(2.36, 0.12, 2.16, 0.04), indMats.steelDark);
+      upperDeck.position.y = 1.24;
+      rig.add(upperDeck);
+      addSafetyRail(rig, -1.08, 1.0, 1.08, 1.0, 1.3, indMats.safetyYellow);
+      addSafetyRail(rig, -1.08, -1.0, -1.08, 1.0, 1.3, indMats.safetyYellow);
+      addLadder(rig, 1.14, 0.14, 1.3, 0.35, Math.PI / 2, indMats.safetyYellow);
+
+      addPressureTank(rig, -0.82, 1.72, -0.58, 0.26, 0.92, false, indMats.panelWhite, indMats.indOrange);
+      const stackL = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.22, 1.15, 10), indMats.steelDark);
+      stackL.position.set(0.75, 1.84, -0.68);
+      stackL.castShadow = true;
+      rig.add(stackL);
+      addPipeRun(rig, [[-0.82, 2.24, -0.58], [0, 2.38, -0.65], [0.75, 2.12, -0.68]], 0.065, indMats.chrome);
+
+      [-0.42, 0.48].forEach((ax, ai) => {
         const armBase = new THREE.Group();
-        armBase.position.set(ax, 1.32, 0);
-        const upper = new THREE.Mesh(makeCapsuleGeo(0.08, 0.72, 8), metalMat(0xfbbf24));
-        upper.position.y = 0.35;
+        armBase.position.set(ax, 1.32, 0.18);
+        const pedestal = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 0.2, 10), indMats.steelMid);
+        armBase.add(pedestal);
+        const upper = new THREE.Mesh(makeCapsuleGeo(0.075, 0.68, 8), indMats.safetyYellow);
+        upper.position.y = 0.42;
         upper.rotation.z = ai === 0 ? -0.45 : 0.45;
+        upper.castShadow = true;
         armBase.add(upper);
-        const head = new THREE.Mesh(octaGeo, metalMat(0x22d3ee, { emissive: 0x06b6d4, emissiveIntensity: 0.6 }));
-        head.scale.setScalar(0.14);
-        head.position.set(ai === 0 ? 0.25 : -0.25, 0.7, 0);
+        const fore = new THREE.Mesh(makeCapsuleGeo(0.055, 0.48, 8), indMats.steelLight);
+        fore.position.set(ai === 0 ? 0.22 : -0.22, 0.72, 0.15);
+        fore.rotation.x = 0.65;
+        armBase.add(fore);
+        const head = new THREE.Mesh(octaGeo, indMats.glowCyan);
+        head.scale.setScalar(0.13);
+        head.position.set(ai === 0 ? 0.22 : -0.22, 0.68, 0.38);
         armBase.add(head);
         rig.add(armBase);
         anim.rotParts.push({ mesh: armBase, axis: "y", speed: ai === 0 ? 2.4 : -2.4 });
       });
-      anim.smokeOrigin = { lx: 0, ly: 1.9, lz: -0.6, col: 0xe879f9 };
+
+      addBoltsInstanced(rig, [
+        [-1.08, 1.32, 0.96], [1.08, 1.32, 0.96], [-1.08, 1.32, -0.96], [1.08, 1.32, -0.96]
+      ]);
+      anim.smokeOrigin = { lx: 0.75, ly: 2.52, lz: -0.68, col: 0xe879f9 };
     }
 
     worldGroup.add(grp);
@@ -2900,6 +3557,100 @@
   joyZone.addEventListener("pointerup", resetJoystick);
   joyZone.addEventListener("pointercancel", resetJoystick);
 
+  // =========================================================================
+  // 12B. MOBILE-FRIENDLY THIRD-PERSON CAMERA CONTROLS (ORBIT + PINCH ZOOM)
+  // =========================================================================
+  let camTargetYaw = 0;
+  let camYaw = 0;
+  let camTargetPitch = 0.62;
+  let camPitch = 0.62;
+  let camTargetDist = 14.8;
+  let camDist = 14.8;
+  let camSafeDist = 14.8;
+  const camLookTarget = new THREE.Vector3(0, 1.15, 2.0);
+
+  const camPointers = new Map();
+  let prevPinchDist = null;
+  let camTapStart = null;
+  let lastCamTapTime = 0;
+
+  function clampVal(v, lo, hi) {
+    return v < lo ? lo : (v > hi ? hi : v);
+  }
+
+  function getTwoPointerDist() {
+    const it = camPointers.values();
+    const a = it.next().value;
+    const b = it.next().value;
+    if (!a || !b) return 0;
+    return Math.hypot(b.x - a.x, b.y - a.y);
+  }
+
+  canvas.addEventListener("pointerdown", (e) => {
+    ensureAudio();
+    if (isMenuMode) return;
+    if (e.target && (e.target === joyZone || joyZone.contains(e.target))) return;
+    if (e.pointerId === activePointerId) return;
+    camPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (camPointers.size === 1) {
+      camTapStart = { x: e.clientX, y: e.clientY, t: performance.now(), moved: false };
+      prevPinchDist = null;
+    } else if (camPointers.size === 2) {
+      camTapStart = null;
+      prevPinchDist = getTwoPointerDist();
+    }
+  });
+
+  window.addEventListener("pointermove", (e) => {
+    if (!camPointers.has(e.pointerId)) return;
+    const prev = camPointers.get(e.pointerId);
+    const dx = e.clientX - prev.x;
+    const dy = e.clientY - prev.y;
+    camPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (isMenuMode) return;
+    if (camPointers.size === 1) {
+      if (camTapStart && Math.hypot(e.clientX - camTapStart.x, e.clientY - camTapStart.y) > 10) {
+        camTapStart.moved = true;
+      }
+      camTargetYaw -= dx * 0.0062;
+      camTargetPitch = clampVal(camTargetPitch + dy * 0.0048, 0.22, 1.18);
+    } else if (camPointers.size >= 2) {
+      const curDist = getTwoPointerDist();
+      if (prevPinchDist !== null && curDist > 0) {
+        const delta = curDist - prevPinchDist;
+        camTargetDist = clampVal(camTargetDist - delta * 0.036, 8.0, 24.0);
+      }
+      prevPinchDist = curDist;
+    }
+  });
+
+  function releaseCamPointer(e) {
+    if (!camPointers.has(e.pointerId)) return;
+    camPointers.delete(e.pointerId);
+    if (camPointers.size === 0 && camTapStart && !camTapStart.moved && !isMenuMode) {
+      const nowT = performance.now();
+      if (nowT - lastCamTapTime < 290) {
+        camTargetYaw = 0;
+        camTargetPitch = 0.62;
+        camTargetDist = 14.8;
+        lastCamTapTime = 0;
+      } else {
+        lastCamTapTime = nowT;
+      }
+    }
+    if (camPointers.size < 2) prevPinchDist = null;
+    camTapStart = null;
+  }
+  window.addEventListener("pointerup", releaseCamPointer);
+  window.addEventListener("pointercancel", releaseCamPointer);
+
+  canvas.addEventListener("wheel", (e) => {
+    if (isMenuMode) return;
+    e.preventDefault();
+    camTargetDist = clampVal(camTargetDist + e.deltaY * 0.012, 8.0, 24.0);
+  }, { passive: false });
+
   const keysDown = {};
   window.addEventListener("keydown", (e) => { keysDown[e.key.toLowerCase()] = true; });
   window.addEventListener("keyup", (e) => { keysDown[e.key.toLowerCase()] = false; });
@@ -2941,12 +3692,98 @@
     }
   }
 
+  // Camera Anti-Clipping AABBs & Terrain Clearance Solver
+  const camColliders = [];
+  function addCamBox(cx, cz, halfW, maxY, halfD, activeFn) {
+    camColliders.push({
+      minX: cx - halfW, maxX: cx + halfW,
+      minY: 0, maxY: maxY,
+      minZ: cz - halfD, maxZ: cz + halfD,
+      activeFn: activeFn || null
+    });
+  }
+  // Trading Post stall
+  addCamBox(SELL_ZONE.x - 1.95, SELL_ZONE.z + 1.95, 1.55, 3.25, 1.35);
+  // Biome Gate pillars
+  BIOMES.forEach((b) => {
+    if (!b.gate) return;
+    if (b.gate.dir === "z") {
+      addCamBox(b.gate.x - 2.4, b.gate.z, 0.55, 3.6, 0.55);
+      addCamBox(b.gate.x + 2.4, b.gate.z, 0.55, 3.6, 0.55);
+    } else {
+      addCamBox(b.gate.x, b.gate.z - 2.4, 0.55, 3.6, 0.55);
+      addCamBox(b.gate.x, b.gate.z + 2.4, 0.55, 3.6, 0.55);
+    }
+  });
+  // Buildings
+  BUILDING_DEFS.forEach((def) => {
+    addCamBox(def.x, def.z, 1.3, 2.75, 1.3, () => (state.buildingLevels[def.id] || 0) > 0);
+  });
+  // Industrial Machines
+  MACHINE_DEFS.forEach((def) => {
+    const isBelt = def.id === "conveyor_belt";
+    addCamBox(def.x, def.z, isBelt ? 1.1 : 1.35, 2.65, isBelt ? 2.85 : 1.35, () => getMachineLevel(def.id) > 0);
+  });
+  // Fleet Vehicles & Containers
+  addCamBox(-9.2, 7.6, 1.15, 2.1, 1.9, () => getFleetLevel("delivery_truck") > 0);
+  addCamBox(11.6, -6.5, 1.5, 2.35, 1.5, () => getFleetLevel("storage_container") > 0);
+  addCamBox(-11.8, -11.4, 1.25, 2.1, 1.35, () => getFleetLevel("excavator") > 0);
+  // Tall Trees
+  resourceNodes.forEach((n) => {
+    if (n.kind === "wood") {
+      addCamBox(n.x, n.z, 0.45, 3.3, 0.45, () => n.mesh.visible);
+    }
+  });
+
+  function raycastCamColliders(ox, oy, oz, dx, dy, dz, maxDist) {
+    let bestT = maxDist;
+    const invX = Math.abs(dx) > 1e-5 ? 1 / dx : 1e8;
+    const invY = Math.abs(dy) > 1e-5 ? 1 / dy : 1e8;
+    const invZ = Math.abs(dz) > 1e-5 ? 1 / dz : 1e8;
+    for (let i = 0; i < camColliders.length; i++) {
+      const box = camColliders[i];
+      if (box.activeFn && !box.activeFn()) continue;
+      const t1 = (box.minX - ox) * invX;
+      const t2 = (box.maxX - ox) * invX;
+      const t3 = (box.minY - oy) * invY;
+      const t4 = (box.maxY - oy) * invY;
+      const t5 = (box.minZ - oz) * invZ;
+      const t6 = (box.maxZ - oz) * invZ;
+      const tMin = Math.max(Math.min(t1, t2), Math.min(t3, t4), Math.min(t5, t6));
+      const tMax = Math.min(Math.max(t1, t2), Math.max(t3, t4), Math.max(t5, t6));
+      if (tMax >= 0 && tMin <= tMax && tMin > 0.35 && tMin < bestT) {
+        bestT = tMin;
+      }
+    }
+    return bestT;
+  }
+
+  function getTerrainFloorY(x, z) {
+    for (let i = 0; i < BIOMES.length; i++) {
+      const b = BIOMES[i];
+      if (Math.abs(x - b.cx) <= 16.4 && Math.abs(z - b.cz) <= 16.4) {
+        const edge = Math.max(Math.abs(x - b.cx), Math.abs(z - b.cz));
+        return edge > 13.6 ? 0.35 : 0.12;
+      }
+    }
+    if ((Math.abs(x) <= 2.8 && Math.abs(z) <= 20.5) ||
+        (Math.abs(z) <= 2.8 && Math.abs(x) <= 20.5) ||
+        (Math.abs(x - 34) <= 2.8 && z <= -14 && z >= -20.5)) {
+      return 0.25;
+    }
+    return -0.88;
+  }
+
   window.setMenuMode = function (inMenu) {
     isMenuMode = Boolean(inMenu);
     if (joyZoneEl) joyZoneEl.style.display = isMenuMode ? "none" : "block";
     if (floatLayer) floatLayer.style.display = isMenuMode ? "none" : "block";
-    if (isMenuMode) resetJoystick({ pointerId: activePointerId });
-    else ensureAudio();
+    if (isMenuMode) {
+      resetJoystick({ pointerId: activePointerId });
+      camPointers.clear();
+    } else {
+      ensureAudio();
+    }
   };
 
   window.applyGameState = function (incoming) {
@@ -2959,6 +3796,7 @@
 
   window.teleportPlayer = function (x, z, biomeId) {
     playerGroup.position.set(x, 0, z);
+    camLookTarget.set(x, 1.15, z);
     const found = BIOMES.find(function (b) { return b.id === biomeId; });
     showBanner("Traveled to " + (found ? found.name : "Region"));
   };
@@ -2982,6 +3820,10 @@
 
   window.resetWorld = function () {
     playerGroup.position.set(0, 0, 2);
+    camLookTarget.set(0, 1.15, 2);
+    camTargetYaw = 0; camYaw = 0;
+    camTargetPitch = 0.62; camPitch = 0.62;
+    camTargetDist = 14.8; camDist = 14.8; camSafeDist = 14.8;
     resourceNodes.forEach((n) => {
       n.hp = n.maxHp;
       n.respawnTimer = 0;
@@ -3095,16 +3937,20 @@
 
       const speedBase = MOVE_SPEEDS[Math.min(state.moveSpeedLevel, 8) - 1];
       const speed = hasUniqueItem("golden_compass") ? speedBase * 1.15 : speedBase;
-      const isMoving = Math.hypot(inputX, inputZ) > 0.05;
+      const cosYaw = Math.cos(camYaw);
+      const sinYaw = Math.sin(camYaw);
+      const worldMoveX = inputX * cosYaw + inputZ * sinYaw;
+      const worldMoveZ = -inputX * sinYaw + inputZ * cosYaw;
+      const isMoving = Math.hypot(worldMoveX, worldMoveZ) > 0.05;
       if (playerAuraRing.visible) playerAuraRing.rotation.z += dt * 1.8;
 
       if (isMoving) {
-        const nx = playerGroup.position.x + inputX * speed * dt;
-        const nz = playerGroup.position.z + inputZ * speed * dt;
+        const nx = playerGroup.position.x + worldMoveX * speed * dt;
+        const nz = playerGroup.position.z + worldMoveZ * speed * dt;
         if (isWalkable(nx, playerGroup.position.z)) playerGroup.position.x = nx;
         if (isWalkable(playerGroup.position.x, nz)) playerGroup.position.z = nz;
 
-        const targetYaw = Math.atan2(inputX, inputZ);
+        const targetYaw = Math.atan2(worldMoveX, worldMoveZ);
         let diff = targetYaw - playerGroup.rotation.y;
         while (diff > Math.PI) diff -= Math.PI * 2;
         while (diff < -Math.PI) diff += Math.PI * 2;
@@ -3127,22 +3973,54 @@
         }
       }
 
-      // 2. Smooth Third-Person Camera (or Scenic Home Menu Orbit)
+      // 2. Advanced Smooth Third-Person Camera (~70° FOV, Orbit, Zoom & Anti-Clipping)
       const px = playerGroup.position.x;
       const pz = playerGroup.position.z;
-      const camLerp = 1 - Math.exp(-6.5 * dt);
+      const targetFov = isMenuMode ? MENU_FOV : GAMEPLAY_FOV;
+      if (Math.abs(targetFov - camera.fov) > 0.04) {
+        camera.fov += (targetFov - camera.fov) * (1 - Math.exp(-6.0 * dt));
+        camera.updateProjectionMatrix();
+      }
 
       if (isMenuMode) {
+        const camLerp = 1 - Math.exp(-5.5 * dt);
         const orbitAng = Math.sin(now * 0.00035) * 0.42;
-        camera.position.x += (px + Math.sin(orbitAng) * 3.1 - camera.position.x) * camLerp;
+        camera.position.x += (px + Math.sin(orbitAng) * 3.2 - camera.position.x) * camLerp;
         camera.position.y += (2.35 - camera.position.y) * camLerp;
-        camera.position.z += (pz + Math.cos(orbitAng) * 4.35 - camera.position.z) * camLerp;
+        camera.position.z += (pz + Math.cos(orbitAng) * 4.45 - camera.position.z) * camLerp;
         camera.lookAt(px, 1.32, pz - 0.3);
       } else {
-        camera.position.x += (px - camera.position.x) * camLerp;
-        camera.position.y += (8.4 - camera.position.y) * camLerp;
-        camera.position.z += (pz + 8.6 - camera.position.z) * camLerp;
-        camera.lookAt(px, 1.05, pz - 0.5);
+        const followLerp = 1 - Math.exp(-10.0 * dt);
+        const orbitLerp = 1 - Math.exp(-11.0 * dt);
+        const zoomLerp = 1 - Math.exp(-8.5 * dt);
+        camLookTarget.x += (px - camLookTarget.x) * followLerp;
+        camLookTarget.y += (1.15 - camLookTarget.y) * followLerp;
+        camLookTarget.z += (pz - camLookTarget.z) * followLerp;
+
+        camYaw += (camTargetYaw - camYaw) * orbitLerp;
+        camPitch += (camTargetPitch - camPitch) * orbitLerp;
+        camDist += (camTargetDist - camDist) * zoomLerp;
+
+        const dirX = Math.cos(camPitch) * Math.sin(camYaw);
+        const dirY = Math.sin(camPitch);
+        const dirZ = Math.cos(camPitch) * Math.cos(camYaw);
+
+        const hitDist = raycastCamColliders(
+          camLookTarget.x, camLookTarget.y, camLookTarget.z,
+          dirX, dirY, dirZ,
+          camDist
+        );
+        const desiredSafeDist = Math.max(3.2, hitDist < camDist ? hitDist - 0.52 : camDist);
+        const safeRate = desiredSafeDist < camSafeDist ? 18.0 : 5.5;
+        camSafeDist += (desiredSafeDist - camSafeDist) * (1 - Math.exp(-safeRate * dt));
+
+        const finalX = camLookTarget.x + dirX * camSafeDist;
+        const finalZ = camLookTarget.z + dirZ * camSafeDist;
+        const floorClearY = getTerrainFloorY(finalX, finalZ) + 0.95;
+        const finalY = Math.max(floorClearY, camLookTarget.y + dirY * camSafeDist);
+
+        camera.position.set(finalX, finalY, finalZ);
+        camera.lookAt(camLookTarget);
       }
 
       sunLight.position.set(px + 16, 26, pz + 14);
@@ -3419,6 +4297,9 @@
         const wm = worldMachines[id];
         if (!isMachineRunning(id)) continue;
         const mBoost = (1 + (getMachineLevel(id) - 1) * 0.3) * beltBoost;
+        if (wm.anim.scrollBelt) {
+          texConveyorBelt.offset.y = (texConveyorBelt.offset.y - dt * 0.9 * mBoost) % 1;
+        }
         for (const rp of wm.anim.rotParts) {
           rp.mesh.rotation[rp.axis] += dt * rp.speed * mBoost;
         }
@@ -3431,7 +4312,14 @@
         }
         if (wm.anim.smokeOrigin && smokeTimer > 0.45) {
           const so = wm.anim.smokeOrigin;
-          spawnMachineSmoke(wm.def.x + so.lx, so.ly, wm.def.z + so.lz, so.col);
+          const cR = Math.cos(wm.def.rotY || 0);
+          const sR = Math.sin(wm.def.rotY || 0);
+          spawnMachineSmoke(
+            wm.def.x + so.lx * cR + so.lz * sR,
+            so.ly,
+            wm.def.z - so.lx * sR + so.lz * cR,
+            so.col
+          );
         }
       }
       if (smokeTimer > 0.45) smokeTimer = 0;
