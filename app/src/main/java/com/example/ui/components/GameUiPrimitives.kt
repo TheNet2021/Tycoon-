@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,12 +13,15 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -46,6 +50,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.R
@@ -95,6 +100,7 @@ fun FrontierSheetScaffold(
     accentColor: Color = AmberGold,
     coins: Long? = null,
     passivePerSec: Double? = null,
+    heightFraction: Float = 0.87f,
     closeTestTag: String,
     onDismiss: () -> Unit,
     content: @Composable ColumnScope.() -> Unit
@@ -104,14 +110,14 @@ fun FrontierSheetScaffold(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = PanelDark.copy(alpha = 0.97f),
+        containerColor = PanelDark.copy(alpha = 0.98f),
         contentColor = CreamText,
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
         dragHandle = {
             Box(
                 modifier = Modifier
                     .padding(top = 10.dp, bottom = 4.dp)
-                    .width(42.dp)
+                    .width(44.dp)
                     .height(4.dp)
                     .clip(CircleShape)
                     .background(PanelBorder.copy(alpha = 0.85f))
@@ -121,6 +127,7 @@ fun FrontierSheetScaffold(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .fillMaxHeight(heightFraction)
                 .navigationBarsPadding()
                 .padding(horizontal = 16.dp)
         ) {
@@ -128,7 +135,7 @@ fun FrontierSheetScaffold(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 4.dp, bottom = 10.dp),
+                    .padding(top = 2.dp, bottom = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -137,17 +144,17 @@ fun FrontierSheetScaffold(
                     modifier = Modifier.weight(1f)
                 ) {
                     Surface(
-                        shape = RoundedCornerShape(16.dp),
+                        shape = RoundedCornerShape(15.dp),
                         color = accentColor.copy(alpha = 0.16f),
-                        border = BorderStroke(1.2.dp, accentColor.copy(alpha = 0.5f)),
-                        modifier = Modifier.size(46.dp)
+                        border = BorderStroke(1.2.dp, accentColor.copy(alpha = 0.55f)),
+                        modifier = Modifier.size(44.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
                                 imageVector = headerIcon,
                                 contentDescription = null,
                                 tint = accentColor,
-                                modifier = Modifier.size(24.dp)
+                                modifier = Modifier.size(22.dp)
                             )
                         }
                     }
@@ -162,7 +169,7 @@ fun FrontierSheetScaffold(
                         )
                         Text(
                             text = subtitle,
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = MaterialTheme.typography.bodySmall,
                             color = LichenMuted,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -174,7 +181,7 @@ fun FrontierSheetScaffold(
                     Surface(
                         shape = RoundedCornerShape(999.dp),
                         color = PanelCard,
-                        border = BorderStroke(1.dp, AmberGold.copy(alpha = 0.4f)),
+                        border = BorderStroke(1.dp, AmberGold.copy(alpha = 0.42f)),
                         modifier = Modifier.padding(end = 6.dp)
                     ) {
                         Row(
@@ -214,7 +221,7 @@ fun FrontierSheetScaffold(
                     IconButton(
                         onClick = onDismiss,
                         modifier = Modifier
-                            .size(42.dp)
+                            .size(40.dp)
                             .minimumInteractiveComponentSize()
                             .testTag(closeTestTag)
                     ) {
@@ -230,10 +237,234 @@ fun FrontierSheetScaffold(
 
             HorizontalDivider(
                 color = PanelBorder.copy(alpha = 0.55f),
-                modifier = Modifier.padding(bottom = 12.dp)
+                modifier = Modifier.padding(bottom = 10.dp)
             )
 
             content()
+        }
+    }
+}
+
+data class FrontierTabSpec(
+    val label: String,
+    val accent: Color,
+    val testTag: String,
+    val icon: ImageVector? = null
+)
+
+@Composable
+fun FrontierSegmentedTabs(
+    tabs: List<FrontierTabSpec>,
+    selectedIndex: Int,
+    onSelect: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = PanelCard.copy(alpha = 0.9f),
+        border = BorderStroke(1.dp, PanelBorder.copy(alpha = 0.65f)),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(bottom = 10.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            tabs.forEachIndexed { idx, tab ->
+                val selected = idx == selectedIndex
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (selected) tab.accent.copy(alpha = 0.22f) else Color.Transparent,
+                    border = if (selected) BorderStroke(1.dp, tab.accent.copy(alpha = 0.75f)) else null,
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { onSelect(idx) }
+                        .minimumInteractiveComponentSize()
+                        .testTag(tab.testTag)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 9.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (tab.icon != null) {
+                            Icon(
+                                imageVector = tab.icon,
+                                contentDescription = null,
+                                tint = if (selected) tab.accent else LichenMuted,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                        }
+                        Text(
+                            text = tab.label,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = if (selected) tab.accent else LichenMuted,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+data class FrontierFilterTab(
+    val label: String,
+    val accent: Color = AmberGold,
+    val testTag: String
+)
+
+@Composable
+fun FrontierFilterStrip(
+    filters: List<FrontierFilterTab>,
+    selectedIndex: Int,
+    onSelect: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    LazyRow(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(bottom = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        itemsIndexed(filters) { idx, filter ->
+            val selected = idx == selectedIndex
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = if (selected) filter.accent else PanelCard,
+                border = BorderStroke(
+                    1.dp,
+                    if (selected) filter.accent else PanelBorder.copy(alpha = 0.7f)
+                ),
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable { onSelect(idx) }
+                    .testTag(filter.testTag)
+            ) {
+                Text(
+                    text = filter.label,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (selected) ObsidianForest else LichenMuted,
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                    maxLines = 1,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun FrontierSectionHeader(
+    title: String,
+    trailingBadge: String? = null,
+    accent: Color = AmberGold,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(top = 4.dp, bottom = 2.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = title.uppercase(),
+            style = MaterialTheme.typography.labelMedium,
+            color = accent,
+            fontWeight = FontWeight.Bold
+        )
+        if (trailingBadge != null) {
+            FrontierBadgeChip(text = trailingBadge, accent = accent)
+        }
+    }
+}
+
+@Composable
+fun FrontierEmptyStateCard(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    accent: Color = LichenMuted,
+    modifier: Modifier = Modifier
+) {
+    FrontierGlassCard(modifier = modifier) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 26.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = accent.copy(alpha = 0.14f),
+                border = BorderStroke(1.dp, accent.copy(alpha = 0.35f)),
+                modifier = Modifier.size(48.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = accent,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                color = CreamText,
+                textAlign = TextAlign.Center
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = LichenMuted,
+                textAlign = TextAlign.Center
+            )
+        }
+    }
+}
+
+@Composable
+fun FrontierStatTile(
+    label: String,
+    value: String,
+    accent: Color,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = PanelElevated.copy(alpha = 0.62f),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.32f)),
+        modifier = modifier
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleSmall,
+                color = accent,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = LichenMuted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
@@ -279,7 +510,7 @@ fun TierPipsBar(
             Box(
                 modifier = Modifier
                     .height(5.dp)
-                    .width(14.dp)
+                    .width(12.dp)
                     .clip(CircleShape)
                     .background(
                         if (filled) activeColor else PanelElevated
@@ -356,7 +587,7 @@ fun FrontierActionButton(
             disabledContainerColor = bg,
             disabledContentColor = fg
         ),
-        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
         modifier = modifier
             .minimumInteractiveComponentSize()
             .testTag(testTag)

@@ -16,8 +16,13 @@ import com.example.data.ContractGenerator
 import com.example.data.DrivableVehicleType
 import com.example.data.FleetEquipType
 import com.example.data.GameRepository
+import com.example.data.HousingType
 import com.example.data.MachineType
 import com.example.data.ResourceUpgradeType
+import com.example.data.SettlementActionOutcome
+import com.example.data.SettlementEngine
+import com.example.data.SupplyRestockKind
+import com.example.data.SurvivorProfession
 import com.example.data.TradeCatalog
 import com.example.data.TycoonSaveState
 import com.example.data.UpgradeType
@@ -88,6 +93,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 val current = _gameState.value
                 val now = System.currentTimeMillis()
                 var updated = tickMachineryAndPower(current)
+                val (settlementTicked, settlementBanner) = SettlementEngine.tick(updated, now)
+                updated = settlementTicked
                 if (now - updated.lastMarketTickEpochMs >= 45_000L || updated.marketMultipliers.isEmpty()) {
                     marketSeedOffset++
                     updated = tickMarketPrices(updated, now)
@@ -101,6 +108,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     lastKotlinMutationElapsedMs = SystemClock.elapsedRealtime()
                     _gameState.value = updated
                     pushStateToEngine(updated)
+                    if (settlementBanner != null) {
+                        val safe = JSONObject.quote(settlementBanner)
+                        _jsCommands.tryEmit("window.showNativeBanner && window.showNativeBanner($safe);")
+                    }
                     scheduleDebouncedSave()
                 }
             }
@@ -116,6 +127,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         if (s.availableContracts.isEmpty()) {
             s = s.copy(availableContracts = ContractGenerator.generateOffers(s, marketSeedOffset))
         }
+        s = SettlementEngine.ensureInitialized(s, now)
         return s
     }
 
@@ -252,7 +264,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             sfxVolume = current.sfxVolume,
             musicVolume = current.musicVolume,
             graphicsQuality = current.graphicsQuality,
-            hapticsEnabled = current.hapticsEnabled
+            hapticsEnabled = current.hapticsEnabled,
+            settlement = current.settlement
         )
         _gameState.value = merged
         scheduleDebouncedSave()
@@ -596,6 +609,78 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val updated = state.copy(availableContracts = fresh)
         applyLocalStateChange(updated, notifyBanner = "New Buyer Contracts Posted!")
         triggerHaptic("light")
+    }
+
+    // =========================================================================
+    // SURVIVOR SETTLEMENT, HOUSING, TRADING & EMPLOYMENT ACTIONS
+    // =========================================================================
+
+    fun startHousingConstruction(housingType: HousingType): Boolean =
+        runSettlementAction("upgrade") {
+            SettlementEngine.startHousingConstruction(_gameState.value, housingType, System.currentTimeMillis())
+        }
+
+    fun demolishHousing(housingId: String): Boolean =
+        runSettlementAction("light") {
+            SettlementEngine.demolishHousing(_gameState.value, housingId)
+        }
+
+    fun admitRefugee(arrivalId: String): Boolean =
+        runSettlementAction("unlock") {
+            SettlementEngine.admitRefugee(_gameState.value, arrivalId, System.currentTimeMillis())
+        }
+
+    fun dismissRefugee(arrivalId: String) {
+        val updated = SettlementEngine.dismissRefugee(_gameState.value, arrivalId)
+        applyLocalStateChange(updated)
+    }
+
+    fun scoutRefugeeArrival(): Boolean =
+        runSettlementAction("light") {
+            SettlementEngine.scoutRefugeeArrival(_gameState.value, System.currentTimeMillis())
+        }
+
+    fun assignSurvivorJob(survivorId: String, role: SurvivorProfession?): Boolean =
+        runSettlementAction("light") {
+            SettlementEngine.assignSurvivorJob(_gameState.value, survivorId, role)
+        }
+
+    fun buyCommunitySupplies(kind: SupplyRestockKind, batches: Int = 1): Boolean =
+        runSettlementAction("coin") {
+            SettlementEngine.buyCommunitySupplies(_gameState.value, kind, batches, System.currentTimeMillis())
+        }
+
+    fun sellGoodToSurvivors(goodId: String, quantity: Int): Boolean =
+        runSettlementAction("coin") {
+            SettlementEngine.sellGoodToSurvivors(_gameState.value, goodId, quantity, System.currentTimeMillis())
+        }
+
+    fun buyGoodFromSurvivors(goodId: String, quantity: Int): Boolean =
+        runSettlementAction("coin") {
+            SettlementEngine.buyGoodFromSurvivors(_gameState.value, goodId, quantity, System.currentTimeMillis())
+        }
+
+    fun completeSettlementContract(contractId: String): Boolean =
+        runSettlementAction("unlock") {
+            SettlementEngine.completeConstructionContract(_gameState.value, contractId, System.currentTimeMillis())
+        }
+
+    private inline fun runSettlementAction(
+        hapticType: String,
+        action: () -> SettlementActionOutcome
+    ): Boolean {
+        return when (val outcome = action()) {
+            is SettlementActionOutcome.Success -> {
+                applyLocalStateChange(outcome.updatedState, notifyBanner = outcome.bannerMessage)
+                triggerHaptic(hapticType)
+                true
+            }
+            is SettlementActionOutcome.Failure -> {
+                val safe = JSONObject.quote(outcome.reason)
+                _jsCommands.tryEmit("window.showNativeBanner && window.showNativeBanner($safe);")
+                false
+            }
+        }
     }
 
     private fun deductFromStockAndBag(

@@ -23,7 +23,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -33,8 +32,6 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -58,7 +55,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.rotate
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.data.ResourceRequirement
@@ -68,7 +64,10 @@ import com.example.data.UpgradeStatMetric
 import com.example.data.UpgradeType
 import com.example.ui.components.FrontierActionButton
 import com.example.ui.components.FrontierBadgeChip
+import com.example.ui.components.FrontierFilterStrip
+import com.example.ui.components.FrontierFilterTab
 import com.example.ui.components.FrontierGlassCard
+import com.example.ui.components.FrontierSectionHeader
 import com.example.ui.components.FrontierSheetScaffold
 import com.example.ui.components.TierPipsBar
 import com.example.ui.components.formatCompactCurrency
@@ -79,9 +78,7 @@ import com.example.ui.theme.CreamText
 import com.example.ui.theme.CrystalCyan
 import com.example.ui.theme.EmeraldCanopy
 import com.example.ui.theme.LichenMuted
-import com.example.ui.theme.ObsidianForest
 import com.example.ui.theme.PanelBorder
-import com.example.ui.theme.PanelCard
 import com.example.ui.theme.PanelElevated
 import kotlin.math.cos
 import kotlin.math.sin
@@ -141,7 +138,7 @@ fun UpgradeShopSheet(
 
     FrontierSheetScaffold(
         title = "Forge & Upgrades",
-        subtitle = "8 evolution tiers: Wooden → Stone → Copper → Iron → Steel → Gold → Diamond → Legendary",
+        subtitle = "8 tiers: Wood → Stone → Copper → Iron → Steel → Gold → Diamond → Legend",
         headerIcon = Icons.Filled.Build,
         accentColor = AmberGold,
         coins = state.coins,
@@ -149,33 +146,20 @@ fun UpgradeShopSheet(
         closeTestTag = "btn_close_shop",
         onDismiss = onDismiss
     ) {
-        // Category Filter Pills
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.padding(bottom = 10.dp)
-        ) {
-            items(UpgradeCategoryFilter.entries) { filter ->
-                FilterChip(
-                    selected = selectedCategory == filter,
-                    onClick = { selectedCategory = filter },
-                    label = { Text(filter.label, style = MaterialTheme.typography.labelMedium) },
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = AmberGold,
-                        selectedLabelColor = ObsidianForest,
-                        containerColor = PanelCard,
-                        labelColor = LichenMuted
-                    ),
-                    border = FilterChipDefaults.filterChipBorder(
-                        enabled = true,
-                        selected = selectedCategory == filter,
-                        borderColor = PanelBorder
-                    ),
-                    modifier = Modifier.testTag("filter_upgrade_${filter.name.lowercase()}")
+        val filters = UpgradeCategoryFilter.entries
+        FrontierFilterStrip(
+            filters = filters.map { filter ->
+                FrontierFilterTab(
+                    label = filter.label,
+                    accent = if (filter == UpgradeCategoryFilter.RESOURCES) CrystalCyan else AmberGold,
+                    testTag = "filter_upgrade_${filter.name.lowercase()}"
                 )
-            }
-        }
+            },
+            selectedIndex = filters.indexOf(selectedCategory).coerceAtLeast(0),
+            onSelect = { idx -> selectedCategory = filters[idx] }
+        )
 
-        // Dedicated Large 3D Equipment / Tech Showcase Stage
+        // Dedicated 3D Equipment / Tech Showcase Stage
         ShowcaseStageCard(
             state = state,
             selectedItem = selectedItem,
@@ -200,10 +184,20 @@ fun UpgradeShopSheet(
         LazyColumn(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(270.dp),
-            contentPadding = PaddingValues(bottom = 20.dp),
+                .weight(1f),
+            contentPadding = PaddingValues(bottom = 18.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            if (visibleEquipment.isNotEmpty() && selectedCategory == UpgradeCategoryFilter.ALL) {
+                item(key = "hdr_equipment") {
+                    FrontierSectionHeader(
+                        title = "Equipment Evolution",
+                        trailingBadge = "${visibleEquipment.size} Tools",
+                        accent = AmberGold
+                    )
+                }
+            }
+
             items(visibleEquipment, key = { "eq_${it.id}" }) { upgrade ->
                 val lvl = state.upgradeLevel(upgrade)
                 val isMax = lvl >= upgrade.maxLevel
@@ -230,7 +224,7 @@ fun UpgradeShopSheet(
                                 shape = RoundedCornerShape(14.dp),
                                 color = PanelElevated,
                                 border = BorderStroke(1.3.dp, tierAccent.copy(alpha = 0.65f)),
-                                modifier = Modifier.size(52.dp)
+                                modifier = Modifier.size(50.dp)
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     EquipmentPreviewCanvas(
@@ -239,7 +233,7 @@ fun UpgradeShopSheet(
                                         accent = tierAccent,
                                         animateOrbit = false,
                                         celebrationProgress = 0f,
-                                        modifier = Modifier.size(40.dp)
+                                        modifier = Modifier.size(38.dp)
                                     )
                                 }
                             }
@@ -306,6 +300,16 @@ fun UpgradeShopSheet(
                 }
             }
 
+            if (visibleResourceUpgrades.isNotEmpty() && selectedCategory == UpgradeCategoryFilter.ALL) {
+                item(key = "hdr_resource_tech") {
+                    FrontierSectionHeader(
+                        title = "Resource Mastery",
+                        trailingBadge = "${visibleResourceUpgrades.size} Techs",
+                        accent = CrystalCyan
+                    )
+                }
+            }
+
             items(visibleResourceUpgrades, key = { "res_${it.id}" }) { resUp ->
                 val lvl = state.resourceUpgradeLevel(resUp)
                 val isMax = lvl >= resUp.maxLevel
@@ -332,14 +336,14 @@ fun UpgradeShopSheet(
                                 shape = RoundedCornerShape(14.dp),
                                 color = PanelElevated,
                                 border = BorderStroke(1.3.dp, accent.copy(alpha = 0.6f)),
-                                modifier = Modifier.size(52.dp)
+                                modifier = Modifier.size(50.dp)
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(
                                         imageVector = Icons.Filled.AutoAwesome,
                                         contentDescription = null,
                                         tint = accent,
-                                        modifier = Modifier.size(24.dp)
+                                        modifier = Modifier.size(22.dp)
                                     )
                                 }
                             }
@@ -466,14 +470,13 @@ private fun ShowcaseStageCard(
     val canAfford = !isMax && reqMet && state.coins >= cost
 
     FrontierGlassCard(accentBorder = accent) {
-        Column(modifier = Modifier.padding(12.dp)) {
+        Column(modifier = Modifier.padding(11.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // Large 3D Preview Stage
                 Surface(
-                    shape = RoundedCornerShape(18.dp),
+                    shape = RoundedCornerShape(16.dp),
                     color = PanelElevated,
                     border = BorderStroke(1.5.dp, accent.copy(alpha = 0.75f)),
-                    modifier = Modifier.size(92.dp)
+                    modifier = Modifier.size(82.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         when (selectedItem) {
@@ -483,19 +486,19 @@ private fun ShowcaseStageCard(
                                 accent = accent,
                                 animateOrbit = true,
                                 celebrationProgress = burstAnim.value,
-                                modifier = Modifier.size(82.dp)
+                                modifier = Modifier.size(72.dp)
                             )
                             is SelectedUpgradeItem.ResourceTech -> ResourceTechPreviewCanvas(
                                 accent = accent,
                                 level = level,
                                 celebrationProgress = burstAnim.value,
-                                modifier = Modifier.size(82.dp)
+                                modifier = Modifier.size(72.dp)
                             )
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(11.dp))
 
                 Column(modifier = Modifier.weight(1f)) {
                     FrontierBadgeChip(text = tierBadge, accent = accent)
@@ -510,7 +513,7 @@ private fun ShowcaseStageCard(
                         style = MaterialTheme.typography.labelSmall,
                         color = if (isMax) EmeraldCanopy else AmberBright
                     )
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(5.dp))
                     TierPipsBar(current = level, max = maxLevel, activeColor = accent)
                 }
 

@@ -33,6 +33,8 @@ import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Factory
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.MonetizationOn
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PrecisionManufacturing
@@ -43,6 +45,8 @@ import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -61,11 +65,14 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.R
 import com.example.data.BiomeType
+import com.example.data.MachineType
 import com.example.data.TycoonSaveState
 import com.example.ui.theme.AmberBright
 import com.example.ui.theme.AmberGold
@@ -93,6 +100,7 @@ fun HomeMenuOverlay(
     onOpenBusiness: () -> Unit,
     onOpenQuests: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenSettlement: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val hasProgress = state.lifetimeEarned > 0L ||
@@ -101,11 +109,13 @@ fun HomeMenuOverlay(
         state.pickaxeLevel > 1 ||
         state.unlockedBiomes.size > 1
     val readyQuests = state.readyQuestCount
+    val activeMachines = MachineType.entries.count { state.isMachineRunning(it) }
+    val deliverableContracts = state.activeContracts.count { state.availableForTrade(it.goodId) >= it.quantity }
 
     val pulseTransition = rememberInfiniteTransition(label = "menuPulse")
     val ctaScale by pulseTransition.animateFloat(
         initialValue = 1f,
-        targetValue = 1.022f,
+        targetValue = 1.02f,
         animationSpec = infiniteRepeatable(
             animation = tween(1400, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
@@ -122,7 +132,7 @@ fun HomeMenuOverlay(
                         ObsidianForest.copy(alpha = 0.56f),
                         Color.Transparent,
                         Color.Transparent,
-                        ObsidianForest.copy(alpha = 0.78f)
+                        ObsidianForest.copy(alpha = 0.80f)
                     )
                 )
             )
@@ -130,7 +140,7 @@ fun HomeMenuOverlay(
             .padding(horizontal = 16.dp, vertical = 10.dp)
     ) {
         // =====================================================================
-        // TOP STATUS STRIP & PROMINENT WILDCRAFT TYCOON LOGO
+        // TOP STATUS BAR + SETTINGS + WILDCRAFT TYCOON HERO LOGO
         // =====================================================================
         Column(
             modifier = Modifier
@@ -147,12 +157,12 @@ fun HomeMenuOverlay(
                 val xpFrac = (state.xpIntoCurrentLevel.toFloat() / state.xpNeededForNextLevel.coerceAtLeast(1L))
                     .coerceIn(0f, 1f)
                 Surface(
-                    shape = RoundedCornerShape(18.dp),
-                    color = PanelDark.copy(alpha = 0.86f),
+                    shape = RoundedCornerShape(16.dp),
+                    color = PanelDark.copy(alpha = 0.88f),
                     border = BorderStroke(1.dp, AmberGold.copy(alpha = 0.55f))
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
@@ -165,7 +175,7 @@ fun HomeMenuOverlay(
                         Column {
                             AnimatedCurrencyText(
                                 coins = state.coins,
-                                style = MaterialTheme.typography.titleMedium,
+                                style = MaterialTheme.typography.titleSmall,
                                 color = CreamText
                             )
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -179,7 +189,7 @@ fun HomeMenuOverlay(
                                 LinearProgressIndicator(
                                     progress = { xpFrac },
                                     modifier = Modifier
-                                        .width(54.dp)
+                                        .width(50.dp)
                                         .height(4.dp)
                                         .clip(CircleShape),
                                     color = CrystalCyan,
@@ -191,60 +201,89 @@ fun HomeMenuOverlay(
                     }
                 }
 
-                // Region & Relics Pill
-                Surface(
-                    shape = RoundedCornerShape(18.dp),
-                    color = PanelDark.copy(alpha = 0.86f),
-                    border = BorderStroke(1.dp, EmeraldCanopy.copy(alpha = 0.5f))
+                // Region Summary + Top-Right Settings Gear
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = PanelDark.copy(alpha = 0.88f),
+                        border = BorderStroke(1.dp, EmeraldCanopy.copy(alpha = 0.5f)),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(16.dp))
+                            .clickable(onClick = onOpenWorldMap)
                     ) {
-                        Icon(
-                            imageVector = Icons.Filled.Explore,
-                            contentDescription = null,
-                            tint = EmeraldCanopy,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(
-                                text = "${state.unlockedBiomes.size}/${BiomeType.entries.size} Regions",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = CreamText
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Explore,
+                                contentDescription = null,
+                                tint = EmeraldCanopy,
+                                modifier = Modifier.size(16.dp)
                             )
-                            Text(
-                                text = if (state.passiveIncomePerSecond > 0) "+$${state.passiveIncomePerSecond.toInt()}/s"
-                                else activeBiome.title,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = EmeraldCanopy
+                            Spacer(modifier = Modifier.width(5.dp))
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(
+                                    text = "${state.unlockedBiomes.size}/${BiomeType.entries.size} Areas",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = CreamText,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = if (state.passiveIncomePerSecond > 0) "+$${state.passiveIncomePerSecond.toInt()}/s"
+                                    else activeBiome.title,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = EmeraldCanopy
+                                )
+                            }
+                        }
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(15.dp),
+                        color = PanelDark.copy(alpha = 0.88f),
+                        border = BorderStroke(1.dp, PanelBorder.copy(alpha = 0.8f))
+                    ) {
+                        IconButton(
+                            onClick = onOpenSettings,
+                            colors = IconButtonDefaults.iconButtonColors(contentColor = CrystalCyan),
+                            modifier = Modifier
+                                .size(44.dp)
+                                .minimumInteractiveComponentSize()
+                                .testTag("btn_home_settings")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Settings,
+                                contentDescription = stringResource(R.string.cd_open_settings),
+                                modifier = Modifier.size(21.dp)
                             )
                         }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            // Prominent Stylized WILDCRAFT TYCOON Logo Emblem
+            // Prominent Stylized WILDCRAFT TYCOON Emblem
             Surface(
-                shape = RoundedCornerShape(24.dp),
+                shape = RoundedCornerShape(22.dp),
                 color = PanelDark.copy(alpha = 0.78f),
                 border = BorderStroke(
-                    1.5.dp,
+                    1.4.dp,
                     Brush.horizontalGradient(listOf(AmberGold, EmeraldCanopy, AmberBright))
                 ),
                 tonalElevation = 6.dp
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Canvas(modifier = Modifier.size(44.dp)) {
+                    Canvas(modifier = Modifier.size(40.dp)) {
                         val w = size.width
                         val h = size.height
-                        // Stylized Mountain + Pine Crest
                         val mountain = Path().apply {
                             moveTo(w * 0.1f, h * 0.85f)
                             lineTo(w * 0.45f, h * 0.2f)
@@ -261,7 +300,6 @@ fun HomeMenuOverlay(
                             close()
                         }
                         drawPath(snowCap, color = Color(0xFFFEF0C7))
-                        // Golden Sun Disc
                         drawCircle(
                             color = Color(0xFFF6B73C),
                             radius = w * 0.14f,
@@ -275,7 +313,7 @@ fun HomeMenuOverlay(
                         Text(
                             text = "WILDCRAFT",
                             style = MaterialTheme.typography.displaySmall.copy(
-                                fontSize = 27.sp,
+                                fontSize = 25.sp,
                                 letterSpacing = 1.4.sp
                             ),
                             color = AmberBright,
@@ -292,9 +330,9 @@ fun HomeMenuOverlay(
                             ) {
                                 Text(
                                     text = "TYCOON",
-                                    style = MaterialTheme.typography.labelLarge.copy(letterSpacing = 2.4.sp),
+                                    style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 2.2.sp),
                                     color = EmeraldCanopy,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
                                 )
                             }
                             Text(
@@ -308,17 +346,15 @@ fun HomeMenuOverlay(
             }
         }
 
-        // Center intentionally left open for the live 3D Character & Forest Diorama!
-
         // =====================================================================
-        // BOTTOM COMMERCIAL HOME MENU DOCK
+        // BOTTOM ORGANIZED MENU DOCK (Hero CTA + 3 Primary Hubs + 4 Utilities)
         // =====================================================================
         Surface(
             shape = RoundedCornerShape(26.dp),
-            color = PanelDark.copy(alpha = 0.88f),
+            color = PanelDark.copy(alpha = 0.90f),
             border = BorderStroke(
                 1.2.dp,
-                Brush.verticalGradient(listOf(AmberGold.copy(alpha = 0.65f), PanelBorder.copy(alpha = 0.55f)))
+                Brush.verticalGradient(listOf(AmberGold.copy(alpha = 0.62f), PanelBorder.copy(alpha = 0.55f)))
             ),
             tonalElevation = 8.dp,
             modifier = Modifier
@@ -341,7 +377,7 @@ fun HomeMenuOverlay(
                     contentPadding = PaddingValues(horizontal = 18.dp, vertical = 10.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(58.dp)
+                        .height(56.dp)
                         .scale(ctaScale)
                         .minimumInteractiveComponentSize()
                         .testTag("btn_home_play")
@@ -362,7 +398,7 @@ fun HomeMenuOverlay(
                             text = if (hasProgress) {
                                 "${activeBiome.title} • Bag ${state.backpackUsed}/${state.backpackMaxCapacity}"
                             } else {
-                                "Explore, gather & build your frontier"
+                                "Explore, gather & build your industrial empire"
                             },
                             style = MaterialTheme.typography.labelSmall,
                             color = ObsidianForest.copy(alpha = 0.78f)
@@ -370,15 +406,12 @@ fun HomeMenuOverlay(
                     }
                 }
 
-                // 2 x 4 Organized Menu Grid
-                val activeMachines = com.example.data.MachineType.entries.count { state.isMachineRunning(it) }
-                val deliverableContracts = state.activeContracts.count { state.availableForTrade(it.goodId) >= it.quantity }
-
+                // Tier 1: Core Progression Loops (3 Spacious Feature Cards)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    HomeGridButton(
+                    HomePrimaryCard(
                         icon = Icons.Filled.Build,
                         label = "Upgrades",
                         subLabel = "Axe Lv.${state.axeLevel}",
@@ -387,16 +420,16 @@ fun HomeMenuOverlay(
                         modifier = Modifier.weight(1f),
                         onClick = onOpenUpgrades
                     )
-                    HomeGridButton(
+                    HomePrimaryCard(
                         icon = Icons.Filled.PrecisionManufacturing,
                         label = "Machinery",
-                        subLabel = "$activeMachines Active",
+                        subLabel = "$activeMachines Running",
                         accent = CrystalCyan,
                         testTag = "btn_home_machinery",
                         modifier = Modifier.weight(1f),
                         onClick = onOpenMachinery
                     )
-                    HomeGridButton(
+                    HomePrimaryCard(
                         icon = Icons.Filled.Storefront,
                         label = "Market",
                         subLabel = if (deliverableContracts > 0) "$deliverableContracts Ready" else "${state.activeContracts.size} Orders",
@@ -406,58 +439,106 @@ fun HomeMenuOverlay(
                         modifier = Modifier.weight(1f),
                         onClick = onOpenMarket
                     )
-                    HomeGridButton(
-                        icon = Icons.Filled.Backpack,
-                        label = "Inventory",
-                        subLabel = "${state.backpackUsed}/${state.backpackMaxCapacity}",
-                        accent = EmeraldCanopy,
-                        testTag = "btn_home_inventory",
-                        modifier = Modifier.weight(1f),
-                        onClick = onOpenInventory
-                    )
                 }
 
+                // Tier 2: World & Management Strip (4 Clean Utility Chips)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    HomeGridButton(
+                    HomeUtilityChip(
                         icon = Icons.Filled.Explore,
-                        label = "World Map",
+                        label = "Map",
                         subLabel = "${state.unlockedBiomes.size}/${BiomeType.entries.size}",
                         accent = EmeraldCanopy,
                         testTag = "btn_home_world_map",
                         modifier = Modifier.weight(1f),
                         onClick = onOpenWorldMap
                     )
-                    HomeGridButton(
+                    HomeUtilityChip(
                         icon = Icons.Filled.Factory,
-                        label = "Business",
+                        label = "Factories",
                         subLabel = "+$${state.passiveIncomePerSecond.toInt()}/s",
                         accent = EmeraldCanopy,
                         testTag = "btn_home_business",
                         modifier = Modifier.weight(1f),
                         onClick = onOpenBusiness
                     )
-                    HomeGridButton(
+                    HomeUtilityChip(
+                        icon = Icons.Filled.Backpack,
+                        label = "Bag",
+                        subLabel = "${state.backpackUsed}/${state.backpackMaxCapacity}",
+                        accent = AmberGold,
+                        testTag = "btn_home_inventory",
+                        modifier = Modifier.weight(1f),
+                        onClick = onOpenInventory
+                    )
+                    HomeUtilityChip(
                         icon = Icons.Filled.EmojiEvents,
                         label = "Quests",
-                        subLabel = if (readyQuests > 0) "$readyQuests Ready!" else "Lv.${state.playerLevel}",
+                        subLabel = if (readyQuests > 0) "$readyQuests Ready" else "Lv.${state.playerLevel}",
                         accent = AmberBright,
                         badgeCount = readyQuests,
                         testTag = "btn_home_quests",
                         modifier = Modifier.weight(1f),
                         onClick = onOpenQuests
                     )
-                    HomeGridButton(
-                        icon = Icons.Filled.Settings,
-                        label = "Settings",
-                        subLabel = if (state.isMuted) "Muted" else "Audio & FX",
-                        accent = CrystalCyan,
-                        testTag = "btn_home_settings",
-                        modifier = Modifier.weight(1f),
-                        onClick = onOpenSettings
-                    )
+                }
+
+                // Compact Settlement Status Strip
+                val stats = state.settlement.computeStats()
+                val arrivals = state.settlement.pendingArrivals.size
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = PanelCard.copy(alpha = 0.85f),
+                    border = BorderStroke(1.dp, EmeraldCanopy.copy(alpha = 0.45f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .clickable(onClick = onOpenSettlement)
+                        .minimumInteractiveComponentSize()
+                        .testTag("btn_home_settlement")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Groups,
+                                contentDescription = stringResource(R.string.cd_open_settlement),
+                                tint = EmeraldCanopy,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "${stats.settlementTierName} • ${stats.population}/${stats.totalHousingCapacity} Beds • ${stats.averageHappiness}% Mood",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = CreamText,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (arrivals > 0) {
+                                Badge(containerColor = CoralCrimson, contentColor = CreamText) {
+                                    Text("$arrivals Gate")
+                                }
+                                Spacer(modifier = Modifier.width(4.dp))
+                            }
+                            Icon(
+                                imageVector = Icons.Filled.KeyboardArrowRight,
+                                contentDescription = null,
+                                tint = LichenMuted,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -465,7 +546,7 @@ fun HomeMenuOverlay(
 }
 
 @Composable
-private fun HomeGridButton(
+private fun HomePrimaryCard(
     icon: ImageVector,
     label: String,
     subLabel: String,
@@ -477,8 +558,8 @@ private fun HomeGridButton(
 ) {
     Surface(
         shape = RoundedCornerShape(16.dp),
-        color = PanelCard.copy(alpha = 0.92f),
-        border = BorderStroke(1.dp, accent.copy(alpha = 0.34f)),
+        color = PanelCard.copy(alpha = 0.94f),
+        border = BorderStroke(1.1.dp, accent.copy(alpha = 0.42f)),
         modifier = modifier
             .clip(RoundedCornerShape(16.dp))
             .clickable(onClick = onClick)
@@ -486,7 +567,84 @@ private fun HomeGridButton(
             .testTag(testTag)
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 10.dp),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Surface(
+                shape = RoundedCornerShape(11.dp),
+                color = accent.copy(alpha = 0.16f),
+                modifier = Modifier.size(34.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    if (badgeCount > 0) {
+                        BadgedBox(
+                            badge = {
+                                Badge(containerColor = CoralCrimson, contentColor = CreamText) {
+                                    Text("$badgeCount")
+                                }
+                            }
+                        ) {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = label,
+                                tint = accent,
+                                modifier = Modifier.size(19.dp)
+                            )
+                        }
+                    } else {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = label,
+                            tint = accent,
+                            modifier = Modifier.size(19.dp)
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                color = CreamText,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = subLabel,
+                style = MaterialTheme.typography.labelSmall,
+                color = LichenMuted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun HomeUtilityChip(
+    icon: ImageVector,
+    label: String,
+    subLabel: String,
+    accent: Color,
+    badgeCount: Int = 0,
+    testTag: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = PanelElevated.copy(alpha = 0.65f),
+        border = BorderStroke(1.dp, PanelBorder.copy(alpha = 0.7f)),
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick)
+            .minimumInteractiveComponentSize()
+            .testTag(testTag)
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
@@ -502,7 +660,7 @@ private fun HomeGridButton(
                         imageVector = icon,
                         contentDescription = label,
                         tint = accent,
-                        modifier = Modifier.size(22.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                 }
             } else {
@@ -510,20 +668,21 @@ private fun HomeGridButton(
                     imageVector = icon,
                     contentDescription = label,
                     tint = accent,
-                    modifier = Modifier.size(22.dp)
+                    modifier = Modifier.size(18.dp)
                 )
             }
-            Spacer(modifier = Modifier.height(5.dp))
+            Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = label,
-                style = MaterialTheme.typography.labelLarge,
+                style = MaterialTheme.typography.labelMedium,
                 color = CreamText,
+                fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             Text(
                 text = subLabel,
-                style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                 color = LichenMuted,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis

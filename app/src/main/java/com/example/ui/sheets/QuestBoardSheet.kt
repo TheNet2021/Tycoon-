@@ -27,8 +27,6 @@ import androidx.compose.material.icons.filled.Forest
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.WorkspacePremium
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -44,7 +42,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.data.QuestCategory
@@ -53,7 +50,11 @@ import com.example.data.TycoonSaveState
 import com.example.data.UniqueQuestItem
 import com.example.ui.components.FrontierActionButton
 import com.example.ui.components.FrontierBadgeChip
+import com.example.ui.components.FrontierEmptyStateCard
+import com.example.ui.components.FrontierFilterStrip
+import com.example.ui.components.FrontierFilterTab
 import com.example.ui.components.FrontierGlassCard
+import com.example.ui.components.FrontierSectionHeader
 import com.example.ui.components.FrontierSheetScaffold
 import com.example.ui.components.formatCompactCurrency
 import com.example.ui.theme.AmberBright
@@ -62,7 +63,6 @@ import com.example.ui.theme.CreamText
 import com.example.ui.theme.CrystalCyan
 import com.example.ui.theme.EmeraldCanopy
 import com.example.ui.theme.LichenMuted
-import com.example.ui.theme.ObsidianForest
 import com.example.ui.theme.PanelBorder
 import com.example.ui.theme.PanelCard
 import com.example.ui.theme.PanelElevated
@@ -82,6 +82,10 @@ fun QuestBoardSheet(
 ) {
     var selectedFilter by remember { mutableStateOf(QuestFilter.ALL) }
     val allQuests = remember(state) { state.evaluateQuests() }
+    val readyCount = remember(allQuests) { allQuests.count { it.isReadyToClaim } }
+    val activeCount = remember(allQuests) { allQuests.count { !it.isCompleted && !it.isClaimed } }
+    val completedCount = remember(allQuests) { allQuests.count { it.isClaimed } }
+
     val filteredQuests = remember(allQuests, selectedFilter) {
         when (selectedFilter) {
             QuestFilter.ALL -> allQuests.sortedBy { if (it.isReadyToClaim) 0 else if (!it.isClaimed) 1 else 2 }
@@ -90,11 +94,10 @@ fun QuestBoardSheet(
             QuestFilter.CLAIMED -> allQuests.filter { it.isClaimed }
         }
     }
-    val completedCount = remember(allQuests) { allQuests.count { it.isClaimed } }
 
     FrontierSheetScaffold(
-        title = "Quests & Achievements",
-        subtitle = "$completedCount of ${allQuests.size} milestones completed",
+        title = "Quests & Milestones",
+        subtitle = "$completedCount of ${allQuests.size} milestones claimed • $readyCount ready",
         headerIcon = Icons.Filled.EmojiEvents,
         accentColor = AmberBright,
         coins = state.coins,
@@ -106,7 +109,7 @@ fun QuestBoardSheet(
             accentBorder = CrystalCyan,
             modifier = Modifier.padding(bottom = 10.dp)
         ) {
-            Column(modifier = Modifier.padding(13.dp)) {
+            Column(modifier = Modifier.padding(12.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -114,7 +117,7 @@ fun QuestBoardSheet(
                 ) {
                     Text(
                         text = "Pioneer Level ${state.playerLevel}",
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.titleSmall,
                         color = CreamText
                     )
                     Text(
@@ -141,12 +144,12 @@ fun QuestBoardSheet(
         }
 
         // Relics / Achievements Showcase Shelf (Unlocked + Locked Goals)
-        Text(
-            text = "Frontier Relics (${state.uniqueItems.size}/${UniqueQuestItem.entries.size})",
-            style = MaterialTheme.typography.labelLarge,
-            color = EmeraldCanopy
+        FrontierSectionHeader(
+            title = "Frontier Relics",
+            trailingBadge = "${state.uniqueItems.size}/${UniqueQuestItem.entries.size}",
+            accent = EmeraldCanopy
         )
-        Spacer(modifier = Modifier.height(6.dp))
+        Spacer(modifier = Modifier.height(4.dp))
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             items(UniqueQuestItem.entries) { relic ->
                 val unlocked = state.uniqueItems.contains(relic.id)
@@ -188,47 +191,44 @@ fun QuestBoardSheet(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(QuestFilter.entries) { filter ->
-                FilterChip(
-                    selected = selectedFilter == filter,
-                    onClick = { selectedFilter = filter },
-                    label = { Text(filter.label, style = MaterialTheme.typography.labelMedium) },
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = AmberGold,
-                        selectedLabelColor = ObsidianForest,
-                        containerColor = PanelCard,
-                        labelColor = LichenMuted
-                    ),
-                    border = FilterChipDefaults.filterChipBorder(
-                        enabled = true,
-                        selected = selectedFilter == filter,
-                        borderColor = PanelBorder
-                    ),
-                    modifier = Modifier.testTag("filter_quest_${filter.name.lowercase()}")
+        val filters = QuestFilter.entries
+        FrontierFilterStrip(
+            filters = filters.map { filter ->
+                val count = when (filter) {
+                    QuestFilter.ALL -> allQuests.size
+                    QuestFilter.READY -> readyCount
+                    QuestFilter.ACTIVE -> activeCount
+                    QuestFilter.CLAIMED -> completedCount
+                }
+                FrontierFilterTab(
+                    label = "${filter.label} ($count)",
+                    accent = when (filter) {
+                        QuestFilter.READY -> EmeraldCanopy
+                        QuestFilter.ACTIVE -> CrystalCyan
+                        else -> AmberGold
+                    },
+                    testTag = "filter_quest_${filter.name.lowercase()}"
                 )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
+            },
+            selectedIndex = filters.indexOf(selectedFilter).coerceAtLeast(0),
+            onSelect = { idx -> selectedFilter = filters[idx] }
+        )
 
         LazyColumn(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(310.dp),
-            contentPadding = PaddingValues(bottom = 20.dp),
+                .weight(1f),
+            contentPadding = PaddingValues(bottom = 18.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             if (filteredQuests.isEmpty()) {
-                item {
-                    FrontierGlassCard {
-                        Text(
-                            text = "No quests in this filter yet. Keep exploring the frontier!",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = LichenMuted,
-                            modifier = Modifier.padding(16.dp)
-                        )
-                    }
+                item(key = "quest_empty") {
+                    FrontierEmptyStateCard(
+                        icon = Icons.Filled.EmojiEvents,
+                        title = "No Quests In This View",
+                        subtitle = "Keep gathering, building, and exploring new regions to complete milestones.",
+                        accent = AmberBright
+                    )
                 }
             } else {
                 items(filteredQuests, key = { it.quest.id }) { progress ->

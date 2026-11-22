@@ -2,7 +2,6 @@ package com.example.ui.sheets
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,7 +35,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -59,8 +57,14 @@ import com.example.data.TradeCatalog
 import com.example.data.TycoonSaveState
 import com.example.ui.components.FrontierActionButton
 import com.example.ui.components.FrontierBadgeChip
+import com.example.ui.components.FrontierEmptyStateCard
+import com.example.ui.components.FrontierFilterStrip
+import com.example.ui.components.FrontierFilterTab
 import com.example.ui.components.FrontierGlassCard
+import com.example.ui.components.FrontierSectionHeader
+import com.example.ui.components.FrontierSegmentedTabs
 import com.example.ui.components.FrontierSheetScaffold
+import com.example.ui.components.FrontierTabSpec
 import com.example.ui.components.TierPipsBar
 import com.example.ui.components.formatCompactCurrency
 import com.example.ui.theme.AmberBright
@@ -72,7 +76,6 @@ import com.example.ui.theme.EmeraldCanopy
 import com.example.ui.theme.LichenMuted
 import com.example.ui.theme.ObsidianForest
 import com.example.ui.theme.PanelBorder
-import com.example.ui.theme.PanelCard
 import com.example.ui.theme.PanelElevated
 import java.util.Locale
 
@@ -87,8 +90,12 @@ fun MachinerySheet(
     onDepositBackpack: () -> Unit
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
+    var machineFilterIdx by remember { mutableIntStateOf(0) }
+
     val activeMachines = MachineType.entries.count { state.isMachineRunning(it) }
     val installedMachines = MachineType.entries.count { state.machineLevel(it) > 0 }
+    val readyMachines = MachineType.entries.count { state.machineLevel(it) == 0 && state.isMachineUnlocked(it) }
+    val lockedMachines = MachineType.entries.count { !state.isMachineUnlocked(it) }
     val fleetOwned = FleetEquipType.entries.count { state.fleetLevel(it) > 0 } +
         DrivableVehicleType.entries.count { state.isVehicleUnlocked(it) }
     val totalFleetCount = FleetEquipType.entries.size + DrivableVehicleType.entries.size
@@ -102,6 +109,15 @@ fun MachinerySheet(
             .sortedByDescending { it.second }
     }
 
+    val filteredMachines = remember(state, machineFilterIdx) {
+        when (machineFilterIdx) {
+            1 -> MachineType.entries.filter { state.isMachineRunning(it) }
+            2 -> MachineType.entries.filter { state.machineLevel(it) == 0 && state.isMachineUnlocked(it) }
+            3 -> MachineType.entries.filter { !state.isMachineUnlocked(it) }
+            else -> MachineType.entries
+        }
+    }
+
     FrontierSheetScaffold(
         title = "Industrial Machinery",
         subtitle = "Automate processing, power lines & heavy fleet",
@@ -112,12 +128,12 @@ fun MachinerySheet(
         closeTestTag = "btn_close_machinery",
         onDismiss = onDismiss
     ) {
-        // Warehouse Stockpile + Backpack Transfer Banner
+        // Warehouse Stockpile + Backpack Transfer Card
         FrontierGlassCard(
             accentBorder = CrystalCyan,
             modifier = Modifier.padding(bottom = 10.dp)
         ) {
-            Column(modifier = Modifier.padding(12.dp)) {
+            Column(modifier = Modifier.padding(11.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -133,7 +149,7 @@ fun MachinerySheet(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Warehouse Stock: ${state.warehouseStockUsed} / ${state.warehouseStockCapacity}",
+                                text = "Warehouse ${state.warehouseStockUsed} / ${state.warehouseStockCapacity}",
                                 style = MaterialTheme.typography.titleSmall,
                                 color = CreamText,
                                 fontWeight = FontWeight.Bold
@@ -144,7 +160,7 @@ fun MachinerySheet(
                             progress = { stockFraction },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(6.dp)
+                                .height(5.dp)
                                 .clip(CircleShape),
                             color = if (stockFraction > 0.9f) CoralCrimson else CrystalCyan,
                             trackColor = PanelElevated,
@@ -153,11 +169,11 @@ fun MachinerySheet(
                         Spacer(modifier = Modifier.height(6.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             FrontierBadgeChip(
-                                text = "$activeMachines/$installedMachines Running",
+                                text = "$activeMachines/$installedMachines Active",
                                 accent = EmeraldCanopy
                             )
                             FrontierBadgeChip(
-                                text = "Power -$${state.totalMachinePowerCostPerMinute}/m",
+                                text = "-$${state.totalMachinePowerCostPerMinute}/m",
                                 accent = AmberGold,
                                 icon = Icons.Filled.Bolt
                             )
@@ -215,63 +231,78 @@ fun MachinerySheet(
             }
         }
 
-        // Two-Tab Switcher
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            MachineryTabChip(
-                label = "Machinery (${MachineType.entries.size})",
-                selected = selectedTab == 0,
-                accent = CrystalCyan,
-                testTag = "tab_machinery_units",
-                modifier = Modifier.weight(1f),
-                onClick = { selectedTab = 0 }
-            )
-            MachineryTabChip(
-                label = "Fleet & Vehicles ($fleetOwned/$totalFleetCount)",
-                selected = selectedTab == 1,
-                accent = AmberGold,
-                testTag = "tab_machinery_fleet",
-                modifier = Modifier.weight(1f),
-                onClick = { selectedTab = 1 }
-            )
-        }
+        // Unified Tab Switcher
+        FrontierSegmentedTabs(
+            tabs = listOf(
+                FrontierTabSpec(
+                    label = "Machinery (${MachineType.entries.size})",
+                    accent = CrystalCyan,
+                    testTag = "tab_machinery_units",
+                    icon = Icons.Filled.PrecisionManufacturing
+                ),
+                FrontierTabSpec(
+                    label = "Fleet & Vehicles ($fleetOwned/$totalFleetCount)",
+                    accent = AmberGold,
+                    testTag = "tab_machinery_fleet",
+                    icon = Icons.Filled.LocalShipping
+                )
+            ),
+            selectedIndex = selectedTab,
+            onSelect = { selectedTab = it }
+        )
 
         if (selectedTab == 0) {
+            FrontierFilterStrip(
+                filters = listOf(
+                    FrontierFilterTab("All (${MachineType.entries.size})", CrystalCyan, "filter_machine_all"),
+                    FrontierFilterTab("Running ($activeMachines)", EmeraldCanopy, "filter_machine_running"),
+                    FrontierFilterTab("Ready ($readyMachines)", AmberGold, "filter_machine_ready"),
+                    FrontierFilterTab("Locked ($lockedMachines)", LichenMuted, "filter_machine_locked")
+                ),
+                selectedIndex = machineFilterIdx,
+                onSelect = { machineFilterIdx = it }
+            )
+
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(340.dp),
+                    .weight(1f),
                 contentPadding = PaddingValues(bottom = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                items(MachineType.entries, key = { it.id }) { machine ->
-                    MachineCard(
-                        machine = machine,
-                        state = state,
-                        onBuyOrUpgrade = { onBuyOrUpgradeMachine(machine) },
-                        onToggleActive = { onToggleMachineActive(machine) }
-                    )
+                if (filteredMachines.isEmpty()) {
+                    item {
+                        FrontierEmptyStateCard(
+                            icon = Icons.Filled.PrecisionManufacturing,
+                            title = "No machines in this category",
+                            subtitle = "Switch tabs or unlock new regions to install more machines.",
+                            accent = CrystalCyan
+                        )
+                    }
+                } else {
+                    items(filteredMachines, key = { it.id }) { machine ->
+                        MachineCard(
+                            machine = machine,
+                            state = state,
+                            onBuyOrUpgrade = { onBuyOrUpgradeMachine(machine) },
+                            onToggleActive = { onToggleMachineActive(machine) }
+                        )
+                    }
                 }
             }
         } else {
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(340.dp),
+                    .weight(1f),
                 contentPadding = PaddingValues(bottom = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 item(key = "hdr_drivable_vehicles") {
-                    Text(
-                        text = "DRIVABLE MINING VEHICLES",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = CrystalCyan,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(top = 2.dp, bottom = 2.dp)
+                    FrontierSectionHeader(
+                        title = "Drivable Mining Vehicles",
+                        trailingBadge = "${DrivableVehicleType.entries.count { state.isVehicleUnlocked(it) }}/${DrivableVehicleType.entries.size}",
+                        accent = CrystalCyan
                     )
                 }
                 items(DrivableVehicleType.entries, key = { "veh_${it.id}" }) { vehicle ->
@@ -282,12 +313,11 @@ fun MachinerySheet(
                     )
                 }
                 item(key = "hdr_industrial_fleet") {
-                    Text(
-                        text = "INDUSTRIAL FLEET & GEAR",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = AmberGold,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(top = 6.dp, bottom = 2.dp)
+                    FrontierSectionHeader(
+                        title = "Industrial Fleet & Gear",
+                        trailingBadge = "${FleetEquipType.entries.count { state.fleetLevel(it) > 0 }}/${FleetEquipType.entries.size}",
+                        accent = AmberGold,
+                        modifier = Modifier.padding(top = 6.dp)
                     )
                 }
                 items(FleetEquipType.entries, key = { it.id }) { fleet ->
@@ -298,41 +328,6 @@ fun MachinerySheet(
                     )
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun MachineryTabChip(
-    label: String,
-    selected: Boolean,
-    accent: Color,
-    testTag: String,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    Surface(
-        shape = RoundedCornerShape(14.dp),
-        color = if (selected) accent.copy(alpha = 0.2f) else PanelCard,
-        border = BorderStroke(1.2.dp, if (selected) accent else PanelBorder),
-        modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
-            .clickable(onClick = onClick)
-            .minimumInteractiveComponentSize()
-            .testTag(testTag)
-    ) {
-        Box(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelLarge,
-                color = if (selected) accent else LichenMuted,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
         }
     }
 }
@@ -370,14 +365,14 @@ private fun MachineCard(
                         1.dp,
                         if (unlocked) accent.copy(alpha = 0.55f) else LichenMuted.copy(alpha = 0.25f)
                     ),
-                    modifier = Modifier.size(46.dp)
+                    modifier = Modifier.size(44.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = if (unlocked) Icons.Filled.PrecisionManufacturing else Icons.Filled.Lock,
                             contentDescription = null,
                             tint = if (unlocked) accent else LichenMuted,
-                            modifier = Modifier.size(22.dp)
+                            modifier = Modifier.size(21.dp)
                         )
                     }
                 }
@@ -408,7 +403,9 @@ private fun MachineCard(
                     Text(
                         text = machine.subtitle,
                         style = MaterialTheme.typography.bodySmall,
-                        color = LichenMuted
+                        color = LichenMuted,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
 
@@ -547,7 +544,7 @@ private fun FleetCard(
                 shape = RoundedCornerShape(14.dp),
                 color = accent.copy(alpha = 0.16f),
                 border = BorderStroke(1.dp, accent.copy(alpha = 0.55f)),
-                modifier = Modifier.size(48.dp)
+                modifier = Modifier.size(46.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
@@ -643,7 +640,7 @@ private fun DrivableVehicleCard(
                     1.dp,
                     if (isDriving) EmeraldCanopy else if (biomeUnlocked || owned) accent.copy(alpha = 0.55f) else PanelBorder
                 ),
-                modifier = Modifier.size(48.dp)
+                modifier = Modifier.size(46.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(

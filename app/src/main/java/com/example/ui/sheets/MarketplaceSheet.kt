@@ -61,8 +61,12 @@ import com.example.data.TradeGoodInfo
 import com.example.data.TycoonSaveState
 import com.example.ui.components.FrontierActionButton
 import com.example.ui.components.FrontierBadgeChip
+import com.example.ui.components.FrontierEmptyStateCard
 import com.example.ui.components.FrontierGlassCard
+import com.example.ui.components.FrontierSectionHeader
+import com.example.ui.components.FrontierSegmentedTabs
 import com.example.ui.components.FrontierSheetScaffold
+import com.example.ui.components.FrontierTabSpec
 import com.example.ui.components.formatCompactCurrency
 import com.example.ui.theme.AmberBright
 import com.example.ui.theme.AmberGold
@@ -112,36 +116,37 @@ fun MarketplaceSheet(
         closeTestTag = "btn_close_market",
         onDismiss = onDismiss
     ) {
-        // Two-tab Switcher
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            MarketTabChip(
-                label = "Buyers (${BuyerCompany.entries.count { state.isBuyerUnlocked(it) }}/${BuyerCompany.entries.size})",
-                selected = selectedTab == 0,
-                accent = AmberGold,
-                testTag = "tab_market_buyers",
-                modifier = Modifier.weight(1f),
-                onClick = { selectedTab = 0 }
-            )
-            MarketTabChip(
-                label = "Contracts (${state.activeContracts.size}/${state.maxActiveContractsAllowed})",
-                selected = selectedTab == 1,
-                accent = EmeraldCanopy,
-                testTag = "tab_market_contracts",
-                modifier = Modifier.weight(1f),
-                onClick = { selectedTab = 1 }
-            )
-        }
+        FrontierSegmentedTabs(
+            tabs = listOf(
+                FrontierTabSpec(
+                    label = "Buyers (${BuyerCompany.entries.count { state.isBuyerUnlocked(it) }}/${BuyerCompany.entries.size})",
+                    accent = AmberGold,
+                    testTag = "tab_market_buyers",
+                    icon = Icons.Filled.Storefront
+                ),
+                FrontierTabSpec(
+                    label = "Contracts (${state.activeContracts.size}/${state.maxActiveContractsAllowed})",
+                    accent = EmeraldCanopy,
+                    testTag = "tab_market_contracts",
+                    icon = Icons.Filled.Assignment
+                )
+            ),
+            selectedIndex = selectedTab,
+            onSelect = { selectedTab = it }
+        )
 
         if (selectedTab == 0) {
             val mult = state.marketMultiplier(selectedGood.id)
             val pct = ((mult - 1.0) * 100.0).roundToInt()
             val isBull = pct >= 0
             val stockCount = state.availableForTrade(selectedGood.id)
+
+            val bestBuyerId = remember(state, selectedGood.id) {
+                BuyerCompany.entries
+                    .filter { state.isBuyerUnlocked(it) }
+                    .maxByOrNull { state.buyerOfferUnitPrice(it, selectedGood.id) }
+                    ?.id
+            }
 
             // Market Price Ticker Banner
             FrontierGlassCard(
@@ -165,12 +170,12 @@ fun MarketplaceSheet(
                         Spacer(modifier = Modifier.width(6.dp))
                         Column {
                             Text(
-                                text = "${selectedGood.displayName} Market Demand",
+                                text = "${selectedGood.displayName} Demand",
                                 style = MaterialTheme.typography.labelLarge,
                                 color = CreamText
                             )
                             Text(
-                                text = "In Bag + Warehouse: $stockCount units",
+                                text = "Available to sell: $stockCount units",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = LichenMuted
                             )
@@ -200,11 +205,11 @@ fun MarketplaceSheet(
                 }
             }
 
-            // 6 Buyer Company Cards
+            // Buyer Company Cards
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(335.dp),
+                    .weight(1f),
                 contentPadding = PaddingValues(bottom = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
@@ -213,6 +218,7 @@ fun MarketplaceSheet(
                         buyer = buyer,
                         good = selectedGood,
                         availableStock = stockCount,
+                        isBestOffer = buyer.id == bestBuyerId,
                         state = state,
                         onSellOne = { onSellToBuyer(buyer, selectedGood.id, 1) },
                         onSellAll = { onSellToBuyer(buyer, selectedGood.id, stockCount) }
@@ -273,17 +279,16 @@ fun MarketplaceSheet(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(365.dp),
+                    .weight(1f),
                 contentPadding = PaddingValues(bottom = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 if (state.activeContracts.isNotEmpty()) {
                     item(key = "hdr_active") {
-                        Text(
-                            text = "ACTIVE DELIVERIES",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = EmeraldCanopy,
-                            fontWeight = FontWeight.Bold
+                        FrontierSectionHeader(
+                            title = "Active Deliveries",
+                            trailingBadge = "${state.activeContracts.size}",
+                            accent = EmeraldCanopy
                         )
                     }
                     items(state.activeContracts, key = { "active_${it.id}" }) { contract ->
@@ -298,58 +303,33 @@ fun MarketplaceSheet(
                 }
 
                 item(key = "hdr_offers") {
-                    Text(
-                        text = "AVAILABLE BUYER CONTRACTS",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = AmberBright,
-                        fontWeight = FontWeight.Bold,
+                    FrontierSectionHeader(
+                        title = "Available Buyer Contracts",
+                        trailingBadge = "${state.availableContracts.size}",
+                        accent = AmberBright,
                         modifier = Modifier.padding(top = if (state.activeContracts.isEmpty()) 0.dp else 4.dp)
                     )
                 }
 
-                items(state.availableContracts, key = { "offer_${it.id}" }) { offer ->
-                    AvailableContractCard(
-                        contract = offer,
-                        canAcceptMore = state.activeContracts.size < state.maxActiveContractsAllowed,
-                        onAccept = { onAcceptContract(offer.id) }
-                    )
+                if (state.availableContracts.isEmpty()) {
+                    item(key = "empty_contracts") {
+                        FrontierEmptyStateCard(
+                            icon = Icons.Filled.Assignment,
+                            title = "No open contracts",
+                            subtitle = "Tap Refresh above to scout new buyer delivery orders.",
+                            accent = AmberGold
+                        )
+                    }
+                } else {
+                    items(state.availableContracts, key = { "offer_${it.id}" }) { offer ->
+                        AvailableContractCard(
+                            contract = offer,
+                            canAcceptMore = state.activeContracts.size < state.maxActiveContractsAllowed,
+                            onAccept = { onAcceptContract(offer.id) }
+                        )
+                    }
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun MarketTabChip(
-    label: String,
-    selected: Boolean,
-    accent: Color,
-    testTag: String,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    Surface(
-        shape = RoundedCornerShape(14.dp),
-        color = if (selected) accent.copy(alpha = 0.2f) else PanelCard,
-        border = BorderStroke(1.2.dp, if (selected) accent else PanelBorder),
-        modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
-            .clickable(onClick = onClick)
-            .minimumInteractiveComponentSize()
-            .testTag(testTag)
-    ) {
-        Box(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelLarge,
-                color = if (selected) accent else LichenMuted,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
         }
     }
 }
@@ -406,6 +386,7 @@ private fun BuyerCard(
     buyer: BuyerCompany,
     good: TradeGoodInfo,
     availableStock: Int,
+    isBestOffer: Boolean,
     state: TycoonSaveState,
     onSellOne: () -> Unit,
     onSellAll: () -> Unit
@@ -420,7 +401,7 @@ private fun BuyerCard(
     val repFrac = (repIntoLevel / 50f).coerceIn(0f, 1f)
     val biomeName = BiomeType.fromId(buyer.unlockBiomeId)?.title ?: buyer.unlockBiomeId
 
-    FrontierGlassCard(accentBorder = if (unlocked && isSpecialty) accent else null) {
+    FrontierGlassCard(accentBorder = if (unlocked && (isBestOffer || isSpecialty)) accent else null) {
         Column(modifier = Modifier.padding(13.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -433,7 +414,7 @@ private fun BuyerCard(
                         1.5.dp,
                         if (unlocked) accent else LichenMuted.copy(alpha = 0.35f)
                     ),
-                    modifier = Modifier.size(46.dp)
+                    modifier = Modifier.size(44.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         if (unlocked) {
@@ -492,7 +473,6 @@ private fun BuyerCard(
                     color = CoralCrimson
                 )
             } else {
-                // Reputation bar + Offer comparison
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -508,7 +488,7 @@ private fun BuyerCard(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "Rep Lv.$repLvl (+${(repLvl - 1) * 6}% Bonus)",
+                                text = "Rep Lv.$repLvl (+${(repLvl - 1) * 6}%)",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = CreamText
                             )
@@ -517,7 +497,7 @@ private fun BuyerCard(
                         LinearProgressIndicator(
                             progress = { repFrac },
                             modifier = Modifier
-                                .width(130.dp)
+                                .width(116.dp)
                                 .height(4.dp)
                                 .clip(CircleShape),
                             color = AmberGold,
@@ -530,9 +510,14 @@ private fun BuyerCard(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        if (isSpecialty) {
+                        if (isBestOffer) {
                             FrontierBadgeChip(
-                                text = "Specialty +${((buyer.specialtyMultiplier - 1.0) * 100).roundToInt()}%",
+                                text = "Best Offer",
+                                accent = EmeraldCanopy
+                            )
+                        } else if (isSpecialty) {
+                            FrontierBadgeChip(
+                                text = "+${((buyer.specialtyMultiplier - 1.0) * 100).roundToInt()}%",
                                 accent = EmeraldCanopy
                             )
                         }
@@ -570,7 +555,7 @@ private fun BuyerCard(
                     FrontierActionButton(
                         text = if (availableStock > 0) "Sell $availableStock (${formatCompactCurrency(totalPayout)})" else "No Stock",
                         enabled = availableStock >= 1,
-                        accentColor = if (isSpecialty) EmeraldCanopy else AmberGold,
+                        accentColor = if (isBestOffer || isSpecialty) EmeraldCanopy else AmberGold,
                         testTag = "btn_sell_all_${buyer.id}",
                         modifier = Modifier.weight(1.25f),
                         onClick = onSellAll

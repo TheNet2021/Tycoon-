@@ -83,6 +83,7 @@ fun ConceptStudioSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .weight(1f)
                 .verticalScroll(rememberScrollState())
                 .padding(bottom = 20.dp)
         ) {

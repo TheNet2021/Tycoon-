@@ -25,6 +25,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -37,6 +41,9 @@ import com.example.data.TycoonSaveState
 import com.example.data.UpgradeType
 import com.example.ui.components.FrontierActionButton
 import com.example.ui.components.FrontierBadgeChip
+import com.example.ui.components.FrontierEmptyStateCard
+import com.example.ui.components.FrontierFilterStrip
+import com.example.ui.components.FrontierFilterTab
 import com.example.ui.components.FrontierGlassCard
 import com.example.ui.components.FrontierSheetScaffold
 import com.example.ui.components.formatCompactCurrency
@@ -48,12 +55,19 @@ import com.example.ui.theme.EmeraldCanopy
 import com.example.ui.theme.LichenMuted
 import com.example.ui.theme.PanelElevated
 
+private enum class BagFilter(val label: String) {
+    ALL("All Resources"),
+    IN_CARGO("In Bag")
+}
+
 @Composable
 fun BackpackSheet(
     state: TycoonSaveState,
     onDismiss: () -> Unit,
     onUpgradeBackpack: () -> Unit
 ) {
+    var selectedFilter by remember { mutableStateOf(BagFilter.ALL) }
+
     val bagUsed = state.backpackUsed
     val bagMax = state.backpackMaxCapacity.coerceAtLeast(1)
     val fillFrac = (bagUsed.toFloat() / bagMax).coerceIn(0f, 1f)
@@ -68,6 +82,16 @@ fun BackpackSheet(
     val bagReqMet = state.meetsResourceRequirement(UpgradeType.BACKPACK.resourceRequirementForNext(bagLvl))
     val canUpgradeBag = !bagIsMax && bagReqMet && state.coins >= bagUpgradeCost
 
+    val heldCount = remember(state.inventory) {
+        ResourceType.entries.count { (state.inventory[it.id] ?: 0) > 0 }
+    }
+    val visibleResources = remember(state.inventory, selectedFilter) {
+        when (selectedFilter) {
+            BagFilter.ALL -> ResourceType.entries
+            BagFilter.IN_CARGO -> ResourceType.entries.filter { (state.inventory[it.id] ?: 0) > 0 }
+        }
+    }
+
     FrontierSheetScaffold(
         title = "Cargo Backpack",
         subtitle = "Walk into the Trading Post to auto-sell cargo",
@@ -80,9 +104,9 @@ fun BackpackSheet(
         // Capacity & Value Summary Card
         FrontierGlassCard(
             accentBorder = if (state.isBackpackFull) CoralCrimson else AmberGold,
-            modifier = Modifier.padding(bottom = 12.dp)
+            modifier = Modifier.padding(bottom = 10.dp)
         ) {
-            Column(modifier = Modifier.padding(14.dp)) {
+            Column(modifier = Modifier.padding(13.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -114,7 +138,7 @@ fun BackpackSheet(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(9.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -146,81 +170,109 @@ fun BackpackSheet(
             }
         }
 
+        val filters = BagFilter.entries
+        FrontierFilterStrip(
+            filters = filters.map { filter ->
+                val label = when (filter) {
+                    BagFilter.ALL -> "All (${ResourceType.entries.size})"
+                    BagFilter.IN_CARGO -> "In Bag ($heldCount)"
+                }
+                FrontierFilterTab(
+                    label = label,
+                    accent = if (filter == BagFilter.IN_CARGO) EmeraldCanopy else AmberGold,
+                    testTag = "filter_bag_${filter.name.lowercase()}"
+                )
+            },
+            selectedIndex = filters.indexOf(selectedFilter).coerceAtLeast(0),
+            onSelect = { idx -> selectedFilter = filters[idx] }
+        )
+
         LazyColumn(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(350.dp),
-            contentPadding = PaddingValues(bottom = 20.dp),
+                .weight(1f),
+            contentPadding = PaddingValues(bottom = 18.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            items(ResourceType.entries) { res ->
-                val held = state.inventory[res.id] ?: 0
-                val totalCollected = state.gatheredTotals[res.id] ?: 0
-                val unitPrice = state.effectiveSellValue(res)
-                val resColor = Color(res.colorHex)
+            if (visibleResources.isEmpty()) {
+                item(key = "bag_empty") {
+                    FrontierEmptyStateCard(
+                        icon = Icons.Filled.Backpack,
+                        title = "Backpack Is Empty",
+                        subtitle = "Chop trees, mine veins, or defeat frontier creatures to fill your cargo bag.",
+                        accent = AmberGold
+                    )
+                }
+            } else {
+                items(visibleResources, key = { it.id }) { res ->
+                    val held = state.inventory[res.id] ?: 0
+                    val totalCollected = state.gatheredTotals[res.id] ?: 0
+                    val unitPrice = state.effectiveSellValue(res)
+                    val resColor = Color(res.colorHex)
 
-                FrontierGlassCard(
-                    accentBorder = if (held > 0) resColor else null
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    FrontierGlassCard(
+                        accentBorder = if (held > 0) resColor else null
                     ) {
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = resColor.copy(alpha = 0.2f),
-                            border = BorderStroke(1.dp, resColor.copy(alpha = 0.6f)),
-                            modifier = Modifier.size(40.dp)
+                        Row(
+                            modifier = Modifier.padding(horizontal = 13.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(16.dp)
-                                        .clip(RoundedCornerShape(4.dp))
-                                        .background(resColor)
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.width(12.dp))
-
-                        Column(modifier = Modifier.weight(1f)) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = resColor.copy(alpha = 0.2f),
+                                border = BorderStroke(1.dp, resColor.copy(alpha = 0.6f)),
+                                modifier = Modifier.size(40.dp)
                             ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(16.dp)
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .background(resColor)
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.width(12.dp))
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Text(
+                                        text = res.displayName,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = CreamText
+                                    )
+                                    FrontierBadgeChip(
+                                        text = "$$unitPrice each",
+                                        accent = AmberBright,
+                                        icon = Icons.Filled.Storefront
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = res.displayName,
-                                    style = MaterialTheme.typography.titleSmall,
-                                    color = CreamText
-                                )
-                                FrontierBadgeChip(
-                                    text = "$$unitPrice each",
-                                    accent = AmberBright,
-                                    icon = Icons.Filled.Storefront
+                                    text = "Lifetime gathered: $totalCollected",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = LichenMuted
                                 )
                             }
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "Lifetime gathered: $totalCollected",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = LichenMuted
-                            )
-                        }
 
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(
-                                text = "x$held",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = if (held > 0) CreamText else LichenMuted,
-                                fontWeight = FontWeight.Bold
-                            )
-                            if (held > 0) {
+                            Column(horizontalAlignment = Alignment.End) {
                                 Text(
-                                    text = formatCompactCurrency(held.toLong() * unitPrice),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = EmeraldCanopy
+                                    text = "x$held",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = if (held > 0) CreamText else LichenMuted,
+                                    fontWeight = FontWeight.Bold
                                 )
+                                if (held > 0) {
+                                    Text(
+                                        text = formatCompactCurrency(held.toLong() * unitPrice),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = EmeraldCanopy
+                                    )
+                                }
                             }
                         }
                     }

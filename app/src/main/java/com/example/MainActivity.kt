@@ -32,6 +32,7 @@ import com.example.ui.sheets.MachinerySheet
 import com.example.ui.sheets.MarketplaceSheet
 import com.example.ui.sheets.QuestBoardSheet
 import com.example.ui.sheets.SettingsSheet
+import com.example.ui.sheets.SettlementSheet
 import com.example.ui.sheets.UpgradeShopSheet
 import com.example.ui.theme.WildcraftTheme
 import com.example.viewmodel.AiViewModel
@@ -43,6 +44,7 @@ private enum class ActiveSheet {
     MACHINERY,
     MARKET,
     BUSINESS,
+    SETTLEMENT,
     BACKPACK,
     BIOMES,
     QUESTS,
@@ -110,6 +112,7 @@ class MainActivity : ComponentActivity() {
                             onOpenBiomes = { activeSheet = ActiveSheet.BIOMES },
                             onOpenQuests = { activeSheet = ActiveSheet.QUESTS },
                             onOpenSettings = { activeSheet = ActiveSheet.SETTINGS },
+                            onOpenSettlement = { activeSheet = ActiveSheet.SETTLEMENT },
                             onToggleVehicle = gameViewModel::toggleQuickVehicle
                         )
                     }
@@ -133,7 +136,8 @@ class MainActivity : ComponentActivity() {
                             onOpenWorldMap = { activeSheet = ActiveSheet.BIOMES },
                             onOpenBusiness = { activeSheet = ActiveSheet.BUSINESS },
                             onOpenQuests = { activeSheet = ActiveSheet.QUESTS },
-                            onOpenSettings = { activeSheet = ActiveSheet.SETTINGS }
+                            onOpenSettings = { activeSheet = ActiveSheet.SETTINGS },
+                            onOpenSettlement = { activeSheet = ActiveSheet.SETTLEMENT }
                         )
                     }
                 }
@@ -170,6 +174,20 @@ class MainActivity : ComponentActivity() {
                         onBuildOrUpgradeBuilding = gameViewModel::buildOrUpgradeBuilding,
                         onHireWorker = gameViewModel::hireBuildingWorker,
                         onAddLine = gameViewModel::addBuildingLine
+                    )
+                    ActiveSheet.SETTLEMENT -> SettlementSheet(
+                        state = gameState,
+                        onDismiss = { activeSheet = ActiveSheet.NONE },
+                        onStartHousing = gameViewModel::startHousingConstruction,
+                        onDemolishHousing = gameViewModel::demolishHousing,
+                        onAdmitRefugee = gameViewModel::admitRefugee,
+                        onDismissRefugee = gameViewModel::dismissRefugee,
+                        onScoutArrival = gameViewModel::scoutRefugeeArrival,
+                        onAssignJob = gameViewModel::assignSurvivorJob,
+                        onBuySupplies = gameViewModel::buyCommunitySupplies,
+                        onSellToSurvivors = gameViewModel::sellGoodToSurvivors,
+                        onBuyFromSurvivors = gameViewModel::buyGoodFromSurvivors,
+                        onCompleteContract = gameViewModel::completeSettlementContract
                     )
                     ActiveSheet.BACKPACK -> BackpackSheet(
                         state = gameState,

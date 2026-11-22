@@ -129,6 +129,7 @@ class GameRepository(private val context: Context) {
         }
         root.put("insectsDefeated", state.insectsDefeated)
         root.put("playerHp", state.playerHp)
+        root.put("settlement", SettlementSerializer.toJson(state.settlement))
         return root.toString()
     }
 
@@ -185,7 +186,8 @@ class GameRepository(private val context: Context) {
                 musicVolume = root.optDouble("musicVolume", 0.45).toFloat().coerceIn(0f, 1f),
                 graphicsQuality = root.optInt("graphicsQuality", 1).coerceIn(0, 2),
                 hapticsEnabled = root.optBoolean("hapticsEnabled", true),
-                lastSavedEpochMs = root.optLong("lastSavedEpochMs", 0L)
+                lastSavedEpochMs = root.optLong("lastSavedEpochMs", 0L),
+                settlement = SettlementSerializer.fromJson(root.optJSONObject("settlement"))
             )
         } catch (_: Exception) {
             TycoonSaveState()

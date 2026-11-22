@@ -1053,7 +1053,8 @@ data class TycoonSaveState(
     val musicVolume: Float = 0.45f,
     val graphicsQuality: Int = 1,
     val hapticsEnabled: Boolean = true,
-    val lastSavedEpochMs: Long = 0L
+    val lastSavedEpochMs: Long = 0L,
+    val settlement: SettlementState = SettlementState()
 ) {
     val playerMaxHp: Int
         get() = 100 + (backpackLevel - 1) * 10 + (axeLevel - 1) * 5
@@ -1320,8 +1321,10 @@ data class TycoonSaveState(
         val biomes = BiomeType.entries
             .filter { isBiomeUnlocked(it) }
             .joinToString(", ") { it.title }
+        val sStats = settlement.computeStats()
         return "Lv$playerLevel ($xp XP), Coins=$coins, Passive=${passiveIncomePerSecond.toInt()}/s, Bag=$backpackUsed/$backpackMaxCapacity ($bagItems), " +
             "Axe=L$axeLevel, Pickaxe=L$pickaxeLevel, BagUpgrade=L$backpackLevel, Speed=L$moveSpeedLevel, " +
-            "Gather=L$gatherSpeedLevel, Buildings=[$builtList], UnlockedBiomes=[$biomes], QuestsReady=$readyQuestCount"
+            "Gather=L$gatherSpeedLevel, Buildings=[$builtList], UnlockedBiomes=[$biomes], QuestsReady=$readyQuestCount, " +
+            "Settlement=[Pop=${sStats.population}/${sStats.totalHousingCapacity}, Happy=${sStats.averageHappiness}%, Rep=${sStats.reputation}]"
     }
 }

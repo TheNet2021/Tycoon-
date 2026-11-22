@@ -94,6 +94,7 @@ fun AdvisorChatSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .weight(1f)
                 .imePadding()
         ) {
             if (!isFirebaseEnabled) {
@@ -160,7 +161,7 @@ fun AdvisorChatSheet(
                 state = listState,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(250.dp)
+                    .weight(1f)
                     .testTag("advisor_message_list"),
                 contentPadding = PaddingValues(vertical = 6.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)

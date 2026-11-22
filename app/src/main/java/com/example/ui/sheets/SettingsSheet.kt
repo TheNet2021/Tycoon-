@@ -57,6 +57,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.data.TycoonSaveState
 import com.example.ui.components.FrontierGlassCard
+import com.example.ui.components.FrontierSectionHeader
 import com.example.ui.components.FrontierSheetScaffold
 import com.example.ui.theme.AmberBright
 import com.example.ui.theme.AmberGold
@@ -91,7 +92,7 @@ fun SettingsSheet(
 
     FrontierSheetScaffold(
         title = "Settings & Audio",
-        subtitle = "Sound, music, graphics quality & haptics",
+        subtitle = "Sound, music, graphics quality & companion tools",
         headerIcon = Icons.Filled.Settings,
         accentColor = LichenMuted,
         closeTestTag = "btn_close_settings",
@@ -100,6 +101,7 @@ fun SettingsSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .weight(1f)
                 .verticalScroll(rememberScrollState())
                 .padding(bottom = 22.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -110,10 +112,9 @@ fun SettingsSheet(
                     modifier = Modifier.padding(14.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Text(
-                        text = "AUDIO MIXER",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = LichenMuted
+                    FrontierSectionHeader(
+                        title = "Audio Mixer",
+                        accent = EmeraldCanopy
                     )
 
                     SettingToggleRow(
@@ -155,10 +156,9 @@ fun SettingsSheet(
                     modifier = Modifier.padding(14.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text(
-                        text = "GRAPHICS & HAPTICS",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = LichenMuted
+                    FrontierSectionHeader(
+                        title = "Graphics & Haptics",
+                        accent = AmberGold
                     )
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -216,10 +216,9 @@ fun SettingsSheet(
                     modifier = Modifier.padding(14.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Text(
-                        text = "FRONTIER COMPANION TOOLS",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = LichenMuted
+                    FrontierSectionHeader(
+                        title = "Frontier Companion Tools",
+                        accent = CrystalCyan
                     )
 
                     ToolLaunchRow(
@@ -254,6 +253,10 @@ fun SettingsSheet(
                     modifier = Modifier.padding(14.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+                    FrontierSectionHeader(
+                        title = "Session & Save Data",
+                        accent = EmeraldCanopy
+                    )
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             imageVector = Icons.Filled.CloudDone,
