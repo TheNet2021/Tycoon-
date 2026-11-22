@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Construction
+import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoveToInbox
@@ -51,6 +52,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.data.BiomeType
+import com.example.data.DrivableVehicleType
 import com.example.data.FleetEquipType
 import com.example.data.MachineType
 import com.example.data.TradeCatalog
@@ -81,12 +83,15 @@ fun MachinerySheet(
     onBuyOrUpgradeMachine: (MachineType) -> Unit,
     onToggleMachineActive: (MachineType) -> Unit,
     onBuyOrUpgradeFleet: (FleetEquipType) -> Unit,
+    onBuyOrSelectVehicle: (DrivableVehicleType) -> Unit,
     onDepositBackpack: () -> Unit
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
     val activeMachines = MachineType.entries.count { state.isMachineRunning(it) }
     val installedMachines = MachineType.entries.count { state.machineLevel(it) > 0 }
-    val fleetOwned = FleetEquipType.entries.count { state.fleetLevel(it) > 0 }
+    val fleetOwned = FleetEquipType.entries.count { state.fleetLevel(it) > 0 } +
+        DrivableVehicleType.entries.count { state.isVehicleUnlocked(it) }
+    val totalFleetCount = FleetEquipType.entries.size + DrivableVehicleType.entries.size
 
     val stockFraction = (state.warehouseStockUsed.toFloat() / state.warehouseStockCapacity.coerceAtLeast(1))
         .coerceIn(0f, 1f)
@@ -226,7 +231,7 @@ fun MachinerySheet(
                 onClick = { selectedTab = 0 }
             )
             MachineryTabChip(
-                label = "Fleet & Tools ($fleetOwned/${FleetEquipType.entries.size})",
+                label = "Fleet & Vehicles ($fleetOwned/$totalFleetCount)",
                 selected = selectedTab == 1,
                 accent = AmberGold,
                 testTag = "tab_machinery_fleet",
@@ -260,6 +265,31 @@ fun MachinerySheet(
                 contentPadding = PaddingValues(bottom = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                item(key = "hdr_drivable_vehicles") {
+                    Text(
+                        text = "DRIVABLE MINING VEHICLES",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = CrystalCyan,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(top = 2.dp, bottom = 2.dp)
+                    )
+                }
+                items(DrivableVehicleType.entries, key = { "veh_${it.id}" }) { vehicle ->
+                    DrivableVehicleCard(
+                        vehicle = vehicle,
+                        state = state,
+                        onAction = { onBuyOrSelectVehicle(vehicle) }
+                    )
+                }
+                item(key = "hdr_industrial_fleet") {
+                    Text(
+                        text = "INDUSTRIAL FLEET & GEAR",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = AmberGold,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(top = 6.dp, bottom = 2.dp)
+                    )
+                }
                 items(FleetEquipType.entries, key = { it.id }) { fleet ->
                     FleetCard(
                         fleet = fleet,
@@ -583,6 +613,99 @@ private fun FleetCard(
                 isCompletedState = isMax,
                 testTag = "btn_fleet_${fleet.id}",
                 onClick = onBuyOrUpgrade
+            )
+        }
+    }
+}
+
+@Composable
+private fun DrivableVehicleCard(
+    vehicle: DrivableVehicleType,
+    state: TycoonSaveState,
+    onAction: () -> Unit
+) {
+    val owned = state.isVehicleUnlocked(vehicle)
+    val isDriving = state.activeVehicleId == vehicle.id
+    val biomeUnlocked = state.unlockedBiomes.contains(vehicle.requiredBiomeId)
+    val biomeTitle = BiomeType.fromId(vehicle.requiredBiomeId)?.title ?: vehicle.requiredBiomeId
+    val canAfford = !owned && biomeUnlocked && state.coins >= vehicle.cost
+    val accent = Color(vehicle.accentHex)
+
+    FrontierGlassCard(accentBorder = if (isDriving) EmeraldCanopy else if (owned) accent else null) {
+        Row(
+            modifier = Modifier.padding(13.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = if (biomeUnlocked || owned) accent.copy(alpha = 0.16f) else PanelElevated,
+                border = BorderStroke(
+                    1.dp,
+                    if (isDriving) EmeraldCanopy else if (biomeUnlocked || owned) accent.copy(alpha = 0.55f) else PanelBorder
+                ),
+                modifier = Modifier.size(48.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = if (owned || biomeUnlocked) Icons.Filled.DirectionsCar else Icons.Filled.Lock,
+                        contentDescription = null,
+                        tint = if (isDriving) EmeraldCanopy else if (owned || biomeUnlocked) accent else LichenMuted,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = vehicle.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = if (owned || biomeUnlocked) CreamText else LichenMuted,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    if (isDriving) {
+                        FrontierBadgeChip(text = "ACTIVE", accent = EmeraldCanopy)
+                    } else if (owned) {
+                        FrontierBadgeChip(text = "OWNED", accent = accent)
+                    }
+                }
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = vehicle.subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = LichenMuted
+                )
+                if (!owned && !biomeUnlocked) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Requires $biomeTitle",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = CoralCrimson
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            val btnLabel = when {
+                isDriving -> "Exit"
+                owned -> "Drive"
+                !biomeUnlocked -> "Locked"
+                else -> "Buy ${formatCompactCurrency(vehicle.cost)}"
+            }
+            FrontierActionButton(
+                text = btnLabel,
+                enabled = owned || canAfford,
+                accentColor = if (isDriving) CoralCrimson else if (owned) EmeraldCanopy else accent,
+                testTag = "btn_vehicle_${vehicle.id}",
+                onClick = onAction
             )
         }
     }

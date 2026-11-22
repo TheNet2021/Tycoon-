@@ -61,8 +61,8 @@ fun BiomeMapSheet(
     onTeleportBiome: (BiomeType) -> Unit
 ) {
     FrontierSheetScaffold(
-        title = "World Regions",
-        subtitle = "Higher frontiers require stronger equipment tiers",
+        title = "World Regions (12 Areas)",
+        subtitle = "${state.unlockedBiomes.size}/${BiomeType.entries.size} unlocked • ${state.discoveredSecrets.size} caves • ${state.defeatedBosses.size}/4 bosses",
         headerIcon = Icons.Filled.Explore,
         accentColor = EmeraldCanopy,
         coins = state.coins,

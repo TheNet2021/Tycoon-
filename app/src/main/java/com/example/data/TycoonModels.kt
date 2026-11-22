@@ -17,7 +17,13 @@ enum class ResourceType(
     IRON("iron", "Iron", 38, 0xFFCBD5E1),
     GOLD("gold", "Gold", 65, 0xFFFBBF24),
     CRYSTAL("crystal", "Crystal", 110, 0xFF22D3EE),
-    RARE("rare", "Rare Relic", 220, 0xFFE879F9);
+    RARE("rare", "Rare Relic", 220, 0xFFE879F9),
+    QUARTZ("quartz", "Prism Quartz", 145, 0xFFF472B6),
+    AETHER("aether", "Aetherium", 185, 0xFF7DD3FC),
+    VENOM("venom", "Bio-Resin", 240, 0xFF84CC16),
+    FROSTITE("frostite", "Frostite", 310, 0xFF67E8F9),
+    OBSIDIAN("obsidian", "Obsidian", 390, 0xFFA855F7),
+    TITAN_ALLOY("titan_alloy", "Titan Core", 520, 0xFF38BDF8);
 
     companion object {
         fun fromId(id: String): ResourceType? = entries.firstOrNull { it.id == id }
@@ -455,6 +461,60 @@ enum class BuildingType(
         baseCost = 22000.0,
         costGrowth = 2.15,
         passivePerLevel = 450.0
+    ),
+    MINER_CRYSTAL_DESERT(
+        id = "miner_crystal_desert",
+        title = "Prism Siphon",
+        description = "Automated quartz & desert prism extractor (+$900/s base)",
+        biomeId = "crystal_desert",
+        baseCost = 48000.0,
+        costGrowth = 2.15,
+        passivePerLevel = 900.0
+    ),
+    MINER_SKY_ISLANDS(
+        id = "miner_sky_islands",
+        title = "Cloud Turbine",
+        description = "Automated aetherium wind condenser (+$1.8K/s base)",
+        biomeId = "sky_islands",
+        baseCost = 110000.0,
+        costGrowth = 2.15,
+        passivePerLevel = 1800.0
+    ),
+    MINER_TOXIC_SWAMP(
+        id = "miner_toxic_swamp",
+        title = "Bio-Resin Purifier",
+        description = "Automated swamp venom refinery (+$3.4K/s base)",
+        biomeId = "toxic_swamp",
+        baseCost = 220000.0,
+        costGrowth = 2.15,
+        passivePerLevel = 3400.0
+    ),
+    MINER_FROZEN_MOUNTAINS(
+        id = "miner_frozen_mountains",
+        title = "Glacier Bore Rig",
+        description = "Automated alpine frostite harvester (+$6.2K/s base)",
+        biomeId = "frozen_mountains",
+        baseCost = 420000.0,
+        costGrowth = 2.15,
+        passivePerLevel = 6200.0
+    ),
+    MINER_VOLCANIC_LANDS(
+        id = "miner_volcanic_lands",
+        title = "Caldera Forge",
+        description = "Automated obsidian magma tap (+$11.5K/s base)",
+        biomeId = "volcanic_lands",
+        baseCost = 780000.0,
+        costGrowth = 2.15,
+        passivePerLevel = 11500.0
+    ),
+    MINER_ANCIENT_MACHINE(
+        id = "miner_ancient_machine",
+        title = "Titan Dynamo",
+        description = "Automated clockwork core reactor (+$22K/s base)",
+        biomeId = "ancient_machine_world",
+        baseCost = 1450000.0,
+        costGrowth = 2.15,
+        passivePerLevel = 22000.0
     );
 
     fun costForNextLevel(currentLevel: Int): Long {
@@ -554,6 +614,84 @@ enum class BiomeType(
         spawnZ = -26.0,
         requiredAxeLevel = 6,
         requiredPickaxeLevel = 6
+    ),
+    CRYSTAL_DESERT(
+        id = "crystal_desert",
+        title = "Crystal Desert",
+        subtitle = "Rose-quartz dunes pierced by singing prism spires",
+        unlockCost = 42000L,
+        accentHex = 0xFFF472B6,
+        resourcesSummary = "Prism Quartz, Gold, Crystal",
+        spawnX = 62.0,
+        spawnZ = 0.0,
+        requiredAxeLevel = 6,
+        requiredPickaxeLevel = 6,
+        requiredBackpackLevel = 4
+    ),
+    SKY_ISLANDS(
+        id = "sky_islands",
+        title = "Sky Islands",
+        subtitle = "Floating celestial turf ringed by ancient wind monoliths",
+        unlockCost = 95000L,
+        accentHex = 0xFF7DD3FC,
+        resourcesSummary = "Aetherium, Crystal, Relics",
+        spawnX = 0.0,
+        spawnZ = -62.0,
+        requiredAxeLevel = 6,
+        requiredPickaxeLevel = 7,
+        requiredBackpackLevel = 5
+    ),
+    TOXIC_SWAMP(
+        id = "toxic_swamp",
+        title = "Toxic Swamp",
+        subtitle = "Bioluminescent bog hiding bio-resin vents & spiders",
+        unlockCost = 185000L,
+        accentHex = 0xFF84CC16,
+        resourcesSummary = "Bio-Resin, Coal, Copper",
+        spawnX = -34.0,
+        spawnZ = 28.0,
+        requiredAxeLevel = 7,
+        requiredPickaxeLevel = 7,
+        requiredBackpackLevel = 5
+    ),
+    FROZEN_MOUNTAINS(
+        id = "frozen_mountains",
+        title = "Frozen Mountains",
+        subtitle = "High-altitude glacier peaks guarded by crystal insects",
+        unlockCost = 340000L,
+        accentHex = 0xFF67E8F9,
+        resourcesSummary = "Frostite, Crystal, Iron",
+        spawnX = -62.0,
+        spawnZ = 0.0,
+        requiredAxeLevel = 7,
+        requiredPickaxeLevel = 8,
+        requiredBackpackLevel = 6
+    ),
+    VOLCANIC_LANDS(
+        id = "volcanic_lands",
+        title = "Volcanic Lands",
+        subtitle = "Deep obsidian badlands & molten cinder-cone geysers",
+        unlockCost = 620000L,
+        accentHex = 0xFFFB7185,
+        resourcesSummary = "Obsidian, Gold, Rare Relics",
+        spawnX = 0.0,
+        spawnZ = 62.0,
+        requiredAxeLevel = 8,
+        requiredPickaxeLevel = 8,
+        requiredBackpackLevel = 7
+    ),
+    ANCIENT_MACHINE_WORLD(
+        id = "ancient_machine_world",
+        title = "Ancient Machine World",
+        subtitle = "Colossal clockwork plating & titan energy cores",
+        unlockCost = 1200000L,
+        accentHex = 0xFF38BDF8,
+        resourcesSummary = "Titan Core, Crystal, Relics",
+        spawnX = 34.0,
+        spawnZ = 28.0,
+        requiredAxeLevel = 8,
+        requiredPickaxeLevel = 8,
+        requiredBackpackLevel = 8
     );
 
     fun meetsEquipmentRequirements(state: TycoonSaveState): Boolean {
@@ -605,6 +743,9 @@ sealed interface QuestRequirement {
     data class UnlockBiome(val biomeType: BiomeType) : QuestRequirement
     data class BuildFacility(val buildingType: BuildingType, val targetLevel: Int) : QuestRequirement
     data class OwnAutoMiners(val targetCount: Int) : QuestRequirement
+    data class DiscoverSecrets(val targetCount: Int) : QuestRequirement
+    data class DefeatInsects(val targetCount: Int) : QuestRequirement
+    data class DefeatBosses(val targetCount: Int) : QuestRequirement
 }
 
 data class QuestDefinition(
@@ -804,6 +945,60 @@ object QuestCatalog {
             requirement = QuestRequirement.UpgradeTool(UpgradeType.PICKAXE, 8),
             rewardCoins = 15000L,
             rewardXp = 1800L
+        ),
+        QuestDefinition(
+            id = "q_defeat_insects_5",
+            title = "Frontier Defender",
+            description = "Defeat 5 hostile insects across the wilds",
+            category = QuestCategory.EXPLORE,
+            requirement = QuestRequirement.DefeatInsects(5),
+            rewardCoins = 420L,
+            rewardXp = 180L
+        ),
+        QuestDefinition(
+            id = "q_discover_caves_3",
+            title = "Cavern Explorer",
+            description = "Discover 3 hidden caves or secret caches",
+            category = QuestCategory.EXPLORE,
+            requirement = QuestRequirement.DiscoverSecrets(3),
+            rewardCoins = 850L,
+            rewardXp = 280L
+        ),
+        QuestDefinition(
+            id = "q_unlock_crystal_desert",
+            title = "Prism Expedition",
+            description = "Unlock the Crystal Desert region",
+            category = QuestCategory.EXPLORE,
+            requirement = QuestRequirement.UnlockBiome(BiomeType.CRYSTAL_DESERT),
+            rewardCoins = 18000L,
+            rewardXp = 1500L
+        ),
+        QuestDefinition(
+            id = "q_unlock_sky_islands",
+            title = "Skyward Bound",
+            description = "Unlock the floating Sky Islands",
+            category = QuestCategory.EXPLORE,
+            requirement = QuestRequirement.UnlockBiome(BiomeType.SKY_ISLANDS),
+            rewardCoins = 36000L,
+            rewardXp = 2200L
+        ),
+        QuestDefinition(
+            id = "q_defeat_boss_1",
+            title = "Titan Slayer",
+            description = "Defeat any optional World Boss",
+            category = QuestCategory.EXPLORE,
+            requirement = QuestRequirement.DefeatBosses(1),
+            rewardCoins = 12000L,
+            rewardXp = 1200L
+        ),
+        QuestDefinition(
+            id = "q_unlock_ancient_machine",
+            title = "Clockwork Horizon",
+            description = "Unlock the Ancient Machine World",
+            category = QuestCategory.EXPLORE,
+            requirement = QuestRequirement.UnlockBiome(BiomeType.ANCIENT_MACHINE_WORLD),
+            rewardCoins = 250000L,
+            rewardXp = 5000L
         )
     )
 }
@@ -847,6 +1042,12 @@ data class TycoonSaveState(
     val unlockedBiomes: Set<String> = setOf("forest"),
     val claimedQuestIds: Set<String> = emptySet(),
     val uniqueItems: Set<String> = emptySet(),
+    val discoveredSecrets: Set<String> = emptySet(),
+    val defeatedBosses: Set<String> = emptySet(),
+    val unlockedVehicles: Set<String> = emptySet(),
+    val activeVehicleId: String? = null,
+    val insectsDefeated: Int = 0,
+    val playerHp: Int = 100,
     val isMuted: Boolean = false,
     val sfxVolume: Float = 0.85f,
     val musicVolume: Float = 0.45f,
@@ -854,6 +1055,10 @@ data class TycoonSaveState(
     val hapticsEnabled: Boolean = true,
     val lastSavedEpochMs: Long = 0L
 ) {
+    val playerMaxHp: Int
+        get() = 100 + (backpackLevel - 1) * 10 + (axeLevel - 1) * 5
+
+    fun isVehicleUnlocked(type: DrivableVehicleType): Boolean = unlockedVehicles.contains(type.id)
     val playerLevel: Int
         get() {
             var lvl = 1
@@ -910,7 +1115,8 @@ data class TycoonSaveState(
             val whLines = buildingLineCount(BuildingType.WAREHOUSE)
             val whBonus = warehouseLevel * (8 + whLines * 4)
             val lanternBonus = if (uniqueItems.contains(UniqueQuestItem.PRISM_LANTERN.id)) 10 else 0
-            return ((base + storageFlat + whBonus + lanternBonus) * storageMult).roundToLong().toInt()
+            val haulerBonus = if (unlockedVehicles.contains(DrivableVehicleType.HEAVY_HAULER.id)) 45 else 0
+            return ((base + storageFlat + whBonus + lanternBonus + haulerBonus) * storageMult).roundToLong().toInt()
         }
 
     val backpackUsed: Int
@@ -1070,7 +1276,13 @@ data class TycoonSaveState(
             BuildingType.MINER_DESERT,
             BuildingType.MINER_FROZEN,
             BuildingType.MINER_VOLCANIC,
-            BuildingType.MINER_JUNGLE
+            BuildingType.MINER_JUNGLE,
+            BuildingType.MINER_CRYSTAL_DESERT,
+            BuildingType.MINER_SKY_ISLANDS,
+            BuildingType.MINER_TOXIC_SWAMP,
+            BuildingType.MINER_FROZEN_MOUNTAINS,
+            BuildingType.MINER_VOLCANIC_LANDS,
+            BuildingType.MINER_ANCIENT_MACHINE
         ).count { buildingLevel(it) > 0 }
 
         return QuestCatalog.all.map { q ->
@@ -1080,6 +1292,9 @@ data class TycoonSaveState(
                 is QuestRequirement.UnlockBiome -> (if (isBiomeUnlocked(req.biomeType)) 1 else 0) to 1
                 is QuestRequirement.BuildFacility -> buildingLevel(req.buildingType) to req.targetLevel
                 is QuestRequirement.OwnAutoMiners -> minerCount to req.targetCount
+                is QuestRequirement.DiscoverSecrets -> discoveredSecrets.size to req.targetCount
+                is QuestRequirement.DefeatInsects -> insectsDefeated to req.targetCount
+                is QuestRequirement.DefeatBosses -> defeatedBosses.size to req.targetCount
             }
             QuestProgress(
                 quest = q,

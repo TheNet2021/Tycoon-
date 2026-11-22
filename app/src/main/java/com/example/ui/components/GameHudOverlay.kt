@@ -32,9 +32,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Backpack
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Factory
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.MonetizationOn
 import androidx.compose.material.icons.filled.PrecisionManufacturing
 import androidx.compose.material.icons.filled.Settings
@@ -68,6 +70,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.R
 import com.example.data.BiomeType
+import com.example.data.DrivableVehicleType
 import com.example.data.ResourceType
 import com.example.data.TycoonSaveState
 import com.example.ui.theme.AmberBright
@@ -97,6 +100,7 @@ fun GameHudOverlay(
     onOpenBiomes: () -> Unit,
     onOpenQuests: () -> Unit,
     onOpenSettings: () -> Unit,
+    onToggleVehicle: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val questList = remember(state) { state.evaluateQuests() }
@@ -220,6 +224,39 @@ fun GameHudOverlay(
                                     color = CrystalCyan,
                                     trackColor = PanelElevated,
                                     strokeCap = StrokeCap.Round
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(3.dp))
+                            val hpFrac = (state.playerHp.toFloat() / state.playerMaxHp.coerceAtLeast(1))
+                                .coerceIn(0f, 1f)
+                            val hpColor = when {
+                                hpFrac <= 0.3f -> CoralCrimson
+                                hpFrac <= 0.6f -> AmberGold
+                                else -> EmeraldCanopy
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Filled.Favorite,
+                                    contentDescription = null,
+                                    tint = hpColor,
+                                    modifier = Modifier.size(11.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                LinearProgressIndicator(
+                                    progress = { hpFrac },
+                                    modifier = Modifier
+                                        .width(58.dp)
+                                        .height(4.dp)
+                                        .clip(CircleShape),
+                                    color = hpColor,
+                                    trackColor = PanelElevated,
+                                    strokeCap = StrokeCap.Round
+                                )
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text(
+                                    text = "${state.playerHp}/${state.playerMaxHp}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (hpFrac < 1f) hpColor else LichenMuted
                                 )
                             }
                         }
@@ -469,6 +506,44 @@ fun GameHudOverlay(
             horizontalAlignment = Alignment.End,
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
+            if (state.unlockedVehicles.isNotEmpty()) {
+                val activeVehicle = DrivableVehicleType.fromId(state.activeVehicleId)
+                val isDriving = activeVehicle != null
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = if (isDriving) EmeraldCanopy.copy(alpha = 0.22f) else PanelDark.copy(alpha = 0.88f),
+                    border = BorderStroke(
+                        1.dp,
+                        if (isDriving) EmeraldCanopy else CrystalCyan.copy(alpha = 0.7f)
+                    ),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(16.dp))
+                        .clickable(onClick = onToggleVehicle)
+                        .minimumInteractiveComponentSize()
+                        .testTag("btn_toggle_vehicle")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.DirectionsCar,
+                            contentDescription = stringResource(R.string.cd_toggle_vehicle),
+                            tint = if (isDriving) EmeraldCanopy else CrystalCyan,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (isDriving) "Exit ${activeVehicle?.title?.substringBefore(" ")}" else "Drive Vehicle",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = CreamText,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+
             if (heldResources.isNotEmpty() || state.isBackpackFull) {
                 Surface(
                     shape = RoundedCornerShape(16.dp),

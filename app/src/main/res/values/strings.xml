@@ -11,6 +11,7 @@
     <string name="cd_open_advisor">Open Tycoon Advisor Chat</string>
     <string name="cd_open_studio">Open Concept Art Studio</string>
     <string name="cd_toggle_audio">Toggle Sound Effects</string>
+    <string name="cd_toggle_vehicle">Toggle Mining Vehicle</string>
     <string name="cd_close_sheet">Close Menu</string>
     <string name="cd_send_message">Send Message</string>
     <string name="cd_generated_concept">Generated Concept Artwork</string>

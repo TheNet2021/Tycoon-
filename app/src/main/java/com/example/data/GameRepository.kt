@@ -111,6 +111,24 @@ class GameRepository(private val context: Context) {
         val itemsArray = JSONArray()
         state.uniqueItems.forEach { itemsArray.put(it) }
         root.put("uniqueItems", itemsArray)
+
+        val secretsArr = JSONArray()
+        state.discoveredSecrets.forEach { secretsArr.put(it) }
+        root.put("discoveredSecrets", secretsArr)
+
+        val bossesArr = JSONArray()
+        state.defeatedBosses.forEach { bossesArr.put(it) }
+        root.put("defeatedBosses", bossesArr)
+
+        val vehiclesArr = JSONArray()
+        state.unlockedVehicles.forEach { vehiclesArr.put(it) }
+        root.put("unlockedVehicles", vehiclesArr)
+
+        if (state.activeVehicleId != null) {
+            root.put("activeVehicleId", state.activeVehicleId)
+        }
+        root.put("insectsDefeated", state.insectsDefeated)
+        root.put("playerHp", state.playerHp)
         return root.toString()
     }
 
@@ -156,6 +174,12 @@ class GameRepository(private val context: Context) {
                 unlockedBiomes = biomes,
                 claimedQuestIds = readStringSet(root.optJSONArray("claimedQuestIds")),
                 uniqueItems = readStringSet(root.optJSONArray("uniqueItems")),
+                discoveredSecrets = readStringSet(root.optJSONArray("discoveredSecrets")),
+                defeatedBosses = readStringSet(root.optJSONArray("defeatedBosses")),
+                unlockedVehicles = readStringSet(root.optJSONArray("unlockedVehicles")),
+                activeVehicleId = root.optString("activeVehicleId", "").takeIf { it.isNotBlank() },
+                insectsDefeated = root.optInt("insectsDefeated", 0).coerceAtLeast(0),
+                playerHp = root.optInt("playerHp", 100).coerceAtLeast(1),
                 isMuted = root.optBoolean("isMuted", false),
                 sfxVolume = root.optDouble("sfxVolume", 0.85).toFloat().coerceIn(0f, 1f),
                 musicVolume = root.optDouble("musicVolume", 0.45).toFloat().coerceIn(0f, 1f),

@@ -109,7 +109,8 @@ class MainActivity : ComponentActivity() {
                             onOpenBackpack = { activeSheet = ActiveSheet.BACKPACK },
                             onOpenBiomes = { activeSheet = ActiveSheet.BIOMES },
                             onOpenQuests = { activeSheet = ActiveSheet.QUESTS },
-                            onOpenSettings = { activeSheet = ActiveSheet.SETTINGS }
+                            onOpenSettings = { activeSheet = ActiveSheet.SETTINGS },
+                            onToggleVehicle = gameViewModel::toggleQuickVehicle
                         )
                     }
 
@@ -151,6 +152,7 @@ class MainActivity : ComponentActivity() {
                         onBuyOrUpgradeMachine = gameViewModel::buyOrUpgradeMachine,
                         onToggleMachineActive = gameViewModel::toggleMachineActive,
                         onBuyOrUpgradeFleet = gameViewModel::buyOrUpgradeFleet,
+                        onBuyOrSelectVehicle = gameViewModel::buyOrSelectVehicle,
                         onDepositBackpack = { gameViewModel.depositBackpackToWarehouse() }
                     )
                     ActiveSheet.MARKET -> MarketplaceSheet(

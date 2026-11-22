@@ -13,6 +13,7 @@ import com.example.data.BiomeType
 import com.example.data.BuildingType
 import com.example.data.BuyerCompany
 import com.example.data.ContractGenerator
+import com.example.data.DrivableVehicleType
 import com.example.data.FleetEquipType
 import com.example.data.GameRepository
 import com.example.data.MachineType
@@ -225,7 +226,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val parsed = repository.deserialize(json)
         val current = _gameState.value
         val merged = parsed.copy(
-            xp = current.xp,
+            xp = maxOf(current.xp, parsed.xp),
             resourceUpgradeLevels = current.resourceUpgradeLevels,
             buildingWorkers = current.buildingWorkers,
             buildingLines = current.buildingLines,
@@ -233,6 +234,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             machineActive = current.machineActive,
             warehouseStock = current.warehouseStock,
             fleetLevels = current.fleetLevels,
+            unlockedVehicles = current.unlockedVehicles + parsed.unlockedVehicles,
+            activeVehicleId = current.activeVehicleId,
+            discoveredSecrets = current.discoveredSecrets + parsed.discoveredSecrets,
+            defeatedBosses = current.defeatedBosses + parsed.defeatedBosses,
+            insectsDefeated = maxOf(current.insectsDefeated, parsed.insectsDefeated),
+            playerHp = parsed.playerHp.coerceIn(1, current.playerMaxHp),
             buyerReputationXp = current.buyerReputationXp,
             marketMultipliers = current.marketMultipliers,
             activeContracts = current.activeContracts,
@@ -376,6 +383,44 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         _jsCommands.tryEmit("window.triggerUpgradeCelebration && window.triggerUpgradeCelebration();")
         triggerHaptic("upgrade")
         return true
+    }
+
+    fun buyOrSelectVehicle(type: DrivableVehicleType): Boolean {
+        val state = _gameState.value
+        if (state.isVehicleUnlocked(type)) {
+            val nextId = if (state.activeVehicleId == type.id) null else type.id
+            val updated = state.copy(activeVehicleId = nextId)
+            val msg = if (nextId != null) "${type.title} Deployed!" else "Dismounted ${type.title}"
+            applyLocalStateChange(updated, notifyBanner = msg)
+            triggerHaptic("light")
+            return true
+        }
+        if (!state.unlockedBiomes.contains(type.requiredBiomeId)) return false
+        if (state.coins < type.cost) return false
+        val updated = state.copy(
+            coins = state.coins - type.cost,
+            unlockedVehicles = state.unlockedVehicles + type.id,
+            activeVehicleId = type.id
+        )
+        applyLocalStateChange(updated, notifyBanner = "${type.title} Unlocked & Deployed!")
+        _jsCommands.tryEmit("window.triggerUpgradeCelebration && window.triggerUpgradeCelebration();")
+        triggerHaptic("unlock")
+        return true
+    }
+
+    fun toggleQuickVehicle() {
+        val state = _gameState.value
+        val owned = DrivableVehicleType.entries.filter { state.isVehicleUnlocked(it) }
+        if (owned.isEmpty()) return
+        val nextId = if (state.activeVehicleId != null) {
+            null
+        } else {
+            owned.last().id
+        }
+        val title = DrivableVehicleType.fromId(nextId)?.title ?: "On Foot"
+        val updated = state.copy(activeVehicleId = nextId)
+        applyLocalStateChange(updated, notifyBanner = if (nextId != null) "Driving: $title" else "On Foot")
+        triggerHaptic("light")
     }
 
     fun toggleMachineActive(type: MachineType) {

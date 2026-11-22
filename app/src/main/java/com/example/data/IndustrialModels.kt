@@ -17,7 +17,9 @@ enum class ProductType(
     METAL_BARS("metal_bars", "Metal Bars", 115, 0xFF94A3B8),
     REFINED_GOLD("refined_gold", "Refined Gold", 210, 0xFFFDE047),
     CUT_CRYSTAL("cut_crystal", "Cut Crystal", 340, 0xFF22D3EE),
-    INDUSTRIAL_GEAR("industrial_gear", "Alloy Assembly", 580, 0xFFE879F9);
+    INDUSTRIAL_GEAR("industrial_gear", "Alloy Assembly", 580, 0xFFE879F9),
+    AETHER_CORE("aether_core", "Aether Core", 920, 0xFF7DD3FC),
+    TITAN_PLATE("titan_plate", "Titan Armor Plate", 1650, 0xFF38BDF8);
 
     companion object {
         fun fromId(id: String): ProductType? = entries.firstOrNull { it.id == id }
@@ -196,6 +198,34 @@ enum class MachineType(
         requiredPlayerLevel = 6,
         requiredBiomeId = "volcanic",
         accentHex = 0xFFE879F9
+    ),
+    CRYSTAL_SYNTHESIZER(
+        id = "crystal_synthesizer",
+        title = "Prism Core Synthesizer",
+        subtitle = "Fuses desert quartz & aether into luminous Aether Cores",
+        inputId = "quartz",
+        outputId = "aether_core",
+        baseCost = 48000L,
+        costGrowth = 2.35,
+        baseCycleSeconds = 12.0,
+        powerCostPerMinute = 65,
+        requiredPlayerLevel = 7,
+        requiredBiomeId = "crystal_desert",
+        accentHex = 0xFFF472B6
+    ),
+    TITAN_FORGE(
+        id = "titan_forge",
+        title = "Titan Clockwork Forge",
+        subtitle = "Presses obsidian & titan cores into ultra-dense armor plates",
+        inputId = "titan_alloy",
+        outputId = "titan_plate",
+        baseCost = 280000L,
+        costGrowth = 2.4,
+        baseCycleSeconds = 14.0,
+        powerCostPerMinute = 95,
+        requiredPlayerLevel = 8,
+        requiredBiomeId = "ancient_machine_world",
+        accentHex = 0xFF38BDF8
     );
 
     fun costForNextLevel(currentLevel: Int): Long {
@@ -272,6 +302,52 @@ enum class FleetEquipType(
     fun costForNextLevel(currentLevel: Int): Long {
         if (currentLevel >= maxLevel) return 0L
         return (baseCost * costGrowth.pow(currentLevel)).roundToLong()
+    }
+}
+
+enum class DrivableVehicleType(
+    val id: String,
+    val title: String,
+    val subtitle: String,
+    val cost: Long,
+    val accentHex: Long,
+    val speedMultiplier: Double,
+    val damageReduction: Double,
+    val requiredBiomeId: String
+) {
+    MINING_ROVER(
+        id = "mining_rover",
+        title = "Small Mining Rover",
+        subtitle = "Nimble 4x4 rover with nose drill (+35% speed, +20% mining cadence)",
+        cost = 850L,
+        accentHex = 0xFF38BDF8,
+        speedMultiplier = 1.35,
+        damageReduction = 0.25,
+        requiredBiomeId = "forest"
+    ),
+    HEAVY_HAULER(
+        id = "heavy_hauler",
+        title = "Heavy Mining Transport",
+        subtitle = "Armored 6-wheel dump hauler (+45 bag capacity, 50% insect armor)",
+        cost = 3200L,
+        accentHex = 0xFFF59E0B,
+        speedMultiplier = 1.20,
+        damageReduction = 0.50,
+        requiredBiomeId = "mountains"
+    ),
+    EXPLORER_BUGGY(
+        id = "explorer_buggy",
+        title = "Exploration Vehicle",
+        subtitle = "All-terrain radar buggy (+55% speed, wide cave & crystal detector)",
+        cost = 7500L,
+        accentHex = 0xFF10B981,
+        speedMultiplier = 1.55,
+        damageReduction = 0.35,
+        requiredBiomeId = "desert"
+    );
+
+    companion object {
+        fun fromId(id: String?): DrivableVehicleType? = entries.firstOrNull { it.id == id }
     }
 }
 
