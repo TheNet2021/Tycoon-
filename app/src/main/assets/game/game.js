@@ -2186,14 +2186,17 @@
     });
     const accentGlow = isSmelter ? indMats.glowAmber : (def.biome === "toxic_swamp" ? indMats.glowGreen : indMats.glowCyan);
 
+    const legacyBody = def.biome !== "forest" ? new THREE.Group() : struct;
+    if (legacyBody !== struct) struct.add(legacyBody);
+
     // Tier 1: Stepped Foundation Plinth + Front Entry Steps + Twin Pressure Boilers + Core Bay
-    addSteppedPlinth(struct, 2.95, 2.78, true, indMats.concreteBase);
+    addSteppedPlinth(legacyBody, 2.95, 2.78, true, indMats.concreteBase);
 
     const baseHull = new THREE.Mesh(makeRoundedBoxGeo(2.05, 1.38, 1.85, 0.08), hullMat);
     baseHull.position.set(0, 1.04, -0.1);
     baseHull.castShadow = true;
     baseHull.receiveShadow = true;
-    struct.add(baseHull);
+    legacyBody.add(baseHull);
 
     // Center Recessed Core Turbine / Bay (green turbine drum or timber intake)
     const frontTurbine = new THREE.Mesh(
@@ -2203,38 +2206,38 @@
     frontTurbine.rotation.z = Math.PI / 2;
     frontTurbine.position.set(0, 0.84, 0.92);
     frontTurbine.castShadow = true;
-    struct.add(frontTurbine);
+    legacyBody.add(frontTurbine);
     const doorLight = new THREE.Mesh(makeRoundedBoxGeo(0.74, 0.14, 0.12, 0.02), accentGlow);
     doorLight.position.set(0, 1.36, 0.88);
-    struct.add(doorLight);
+    legacyBody.add(doorLight);
 
     // Twin Flanking Horizontal Saddle Pressure Tanks + Elbow Feeds
-    addPressureTank(struct, -1.16, 0.88, 0.25, 0.28, 0.88, true, indMats.domeCream, indMats.indOrange);
-    addPressureTank(struct, 1.16, 0.88, 0.25, 0.28, 0.88, true, indMats.domeCream, indMats.indOrange);
-    addPipeRun(struct, [[-1.62, 0.88, 0.25], [-1.72, 0.42, 0.85], [-1.25, 0.42, 1.05]], 0.065, indMats.safetyYellow);
-    addPipeRun(struct, [[1.62, 0.88, 0.25], [1.72, 0.42, 0.85], [1.25, 0.42, 1.05]], 0.065, indMats.safetyYellow);
+    addPressureTank(legacyBody, -1.16, 0.88, 0.25, 0.28, 0.88, true, indMats.domeCream, indMats.indOrange);
+    addPressureTank(legacyBody, 1.16, 0.88, 0.25, 0.28, 0.88, true, indMats.domeCream, indMats.indOrange);
+    addPipeRun(legacyBody, [[-1.62, 0.88, 0.25], [-1.72, 0.42, 0.85], [-1.25, 0.42, 1.05]], 0.065, indMats.safetyYellow);
+    addPipeRun(legacyBody, [[1.62, 0.88, 0.25], [1.72, 0.42, 0.85], [1.25, 0.42, 1.05]], 0.065, indMats.safetyYellow);
 
     const louver = new THREE.Mesh(makeRoundedBoxGeo(0.08, 0.65, 0.85, 0.015), indMats.vents);
     louver.position.set(1.06, 1.05, -0.2);
-    struct.add(louver);
+    legacyBody.add(louver);
 
     // Tier 2: Cantilevered Mezzanine Deck + Continuous Safety-Amber Perimeter Rails + Side Balcony Tower
-    addCantileverDeck(struct, 3.02, 2.74, 1.88, 0.36, indMats.safetyYellow, !isWood);
-    addLadder(struct, -1.48, 0.36, 1.92, -0.35, -Math.PI / 2, indMats.safetyYellow);
-    addSideBalconyTower(struct, 1.48, -0.82, 2.25, 0.56, indMats.steelMid, indMats.safetyYellow, accentGlow);
+    addCantileverDeck(legacyBody, 3.02, 2.74, 1.88, 0.36, indMats.safetyYellow, !isWood);
+    addLadder(legacyBody, -1.48, 0.36, 1.92, -0.35, -Math.PI / 2, indMats.safetyYellow);
+    addSideBalconyTower(legacyBody, 1.48, -0.82, 2.25, 0.56, indMats.steelMid, indMats.safetyYellow, accentGlow);
 
     // Tier 3: Towering Ribbed Domed Silo Superstructure + Cyan Coolant Chute + Elbow Smokestack + Rotor
     addSiloSuperstructure(
-      struct, -0.08, 1.96, -0.18, 0.92, 1.25,
+      legacyBody, -0.08, 1.96, -0.18, 0.92, 1.25,
       isWood ? hullMat : indMats.domeCream,
       isSmelter ? indMats.indOrange : (def.id === "warehouse" ? indMats.panelBlue : indMats.domeCream),
       accentGlow
     );
     if (!isWood) {
-      addCoolantChute(struct, -0.08, 2.42, 0.72, 0, isSmelter ? indMats.glowAmber : indMats.coolantChute);
+      addCoolantChute(legacyBody, -0.08, 2.42, 0.72, 0, isSmelter ? indMats.glowAmber : indMats.coolantChute);
     }
-    addPipeRun(struct, [[-1.16, 1.18, 0.25], [-1.18, 2.55, -0.18], [-0.95, 2.75, -0.18]], 0.075, indMats.steelLight);
-    addElbowStack(struct, 0.68, 1.96, -0.86, 1.78, 0.2, indMats.steelDark, indMats.indOrange);
+    addPipeRun(legacyBody, [[-1.16, 1.18, 0.25], [-1.18, 2.55, -0.18], [-0.95, 2.75, -0.18]], 0.075, indMats.steelLight);
+    addElbowStack(legacyBody, 0.68, 1.96, -0.86, 1.78, 0.2, indMats.steelDark, indMats.indOrange);
 
     const spinner = new THREE.Mesh(
       gearWheelGeo,
@@ -2287,6 +2290,17 @@
       drone.visible = false;
       workerGroup.add(drone);
       workerMeshes.push(drone);
+    }
+
+    if (def.biome !== "forest" && window.ModelAssetManager) {
+      window.ModelAssetManager.registerBuildingMount(def, struct, legacyBody, 0.16, (metrics) => {
+        spinner.position.set(metrics.mainX, Math.max(2.05, metrics.mainTopY + 0.18), metrics.mainZ);
+        if (def.id === "miner_sky_islands") spinner.scale.setScalar(0.95);
+        const droneY = Math.max(2.45, metrics.maxTopY + 0.22);
+        for (let wi = 0; wi < workerMeshes.length; wi++) {
+          workerMeshes[wi].position.y = droneY;
+        }
+      });
     }
 
     grp.add(struct);
@@ -2762,8 +2776,10 @@
       anim.crates.push({ mesh: conc, axis: "x", min: -0.45, max: 1.05, speed: 0.52 });
 
     } else if (def.id === "smelting_furnace") {
-      // 7. SMELTING BLAST FURNACE (~5.1u tall): Stepped Refractory Base + Banded Blast Cupola + Twin Preheater Stoves + Charging Mezzanine + Elbow Stack
-      addSteppedPlinth(rig, 3.0, 2.86, true, indMats.concreteBase);
+      // 7. SMELTING BLAST FURNACE (upgraded to Kenney building-b + chimney-basic + container-a with molten hearth & smoke)
+      const legacyBody = new THREE.Group();
+      rig.add(legacyBody);
+      addSteppedPlinth(legacyBody, 3.0, 2.86, true, indMats.concreteBase);
 
       const vessel = new THREE.Mesh(
         new THREE.CylinderGeometry(0.96, 1.18, 2.45, 16),
@@ -2771,15 +2787,15 @@
       );
       vessel.position.set(-0.22, 1.56, -0.1);
       vessel.castShadow = true;
-      rig.add(vessel);
+      legacyBody.add(vessel);
 
       [0.85, 1.55, 2.25, 2.75].forEach((ry) => {
         const band = new THREE.Mesh(new THREE.CylinderGeometry(1.16 - ry * 0.07, 1.16 - ry * 0.07, 0.12, 16), indMats.steelDark);
         band.position.set(-0.22, ry, -0.1);
-        rig.add(band);
+        legacyBody.add(band);
       });
 
-      // Glowing Molten Crucible Hearth & Cast-Iron Tap Arch
+      // Glowing Molten Crucible Hearth & Cast-Iron Tap Arch (kept visible front-of-building)
       const hearthArch = new THREE.Mesh(makeRoundedBoxGeo(0.94, 0.82, 0.42, 0.05), indMats.steelDark);
       hearthArch.position.set(-0.22, 0.76, 0.96);
       rig.add(hearthArch);
@@ -2789,23 +2805,23 @@
       rig.add(hearth);
 
       // Twin Hot-Blast Preheater Stove Towers + 2nd-Story Charging Deck
-      addPressureTank(rig, 1.06, 1.32, -0.45, 0.38, 1.65, false, indMats.domeCream, indMats.indOrange);
-      addCantileverDeck(rig, 2.94, 2.48, 2.38, 0.36, indMats.safetyYellow, false);
-      addLadder(rig, 1.46, 0.36, 2.42, 0.1, Math.PI / 2, indMats.safetyYellow);
+      addPressureTank(legacyBody, 1.06, 1.32, -0.45, 0.38, 1.65, false, indMats.domeCream, indMats.indOrange);
+      addCantileverDeck(legacyBody, 2.94, 2.48, 2.38, 0.36, indMats.safetyYellow, false);
+      addLadder(legacyBody, 1.46, 0.36, 2.42, 0.1, Math.PI / 2, indMats.safetyYellow);
 
       const topDome = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.98, 0.75, 16), indMats.steelMid);
       topDome.position.set(-0.22, 3.16, -0.1);
       topDome.castShadow = true;
-      rig.add(topDome);
+      legacyBody.add(topDome);
       const cyanRing = new THREE.Mesh(new THREE.TorusGeometry(0.98, 0.052, 8, 24), indMats.glowAmber);
       cyanRing.rotation.x = Math.PI / 2;
       cyanRing.position.set(-0.22, 2.65, -0.1);
-      rig.add(cyanRing);
+      legacyBody.add(cyanRing);
 
-      addPipeRun(rig, [[1.06, 2.28, -0.45], [0.58, 3.12, -0.25], [-0.22, 3.42, -0.1]], 0.095, indMats.copper);
-      addElbowStack(rig, -0.58, 2.45, -0.78, 2.15, 0.26, indMats.steelDark, indMats.indOrange);
+      addPipeRun(legacyBody, [[1.06, 2.28, -0.45], [0.58, 3.12, -0.25], [-0.22, 3.42, -0.1]], 0.095, indMats.copper);
+      addElbowStack(legacyBody, -0.58, 2.45, -0.78, 2.15, 0.26, indMats.steelDark, indMats.indOrange);
 
-      addBoltsInstanced(rig, [
+      addBoltsInstanced(legacyBody, [
         [-0.6, 1.12, 1.0], [0.16, 1.12, 1.0], [-0.6, 0.44, 1.0], [0.16, 0.44, 1.0]
       ]);
 
@@ -2815,41 +2831,48 @@
       rig.add(bar);
       anim.crates.push({ mesh: bar, axis: "z", min: 0.6, max: 1.24, speed: 0.42 });
       anim.smokeOrigin = { lx: -0.2, ly: 5.05, lz: -0.78, col: 0x9ca3af };
+      if (window.ModelAssetManager) {
+        window.ModelAssetManager.registerMachineMount(def, rig, legacyBody, 0.16, () => {
+          hearthArch.position.set(-0.12, 0.68, 0.78);
+          hearth.position.set(-0.12, 0.68, 0.90);
+          anim.smokeOrigin = { lx: -0.68, ly: 3.22, lz: -0.78, col: 0x9ca3af };
+        });
+      }
 
     } else if (def.id === "gold_refinery") {
-      // 8. GOLD REFINERY (Hero Flagship matching Reference Image! ~5.0u tall):
-      // Stepped plinth w/ front steps + center green drum + twin horizontal saddle tanks w/ orange straps
-      // + cantilevered 2nd-story deck w/ amber safety rails + side balcony tower + towering cream domed silo w/ cyan coolant ring, curved chute & elbow chimney
-      addSteppedPlinth(rig, 3.0, 2.86, true, indMats.concreteBase);
+      // 8. GOLD REFINERY (upgraded to Kenney building-c + chimney-small + detail-tank + solar-panel-flat)
+      const legacyBody = new THREE.Group();
+      rig.add(legacyBody);
+      addSteppedPlinth(legacyBody, 3.0, 2.86, true, indMats.concreteBase);
 
       const lowerBay = new THREE.Mesh(makeRoundedBoxGeo(2.05, 1.22, 1.75, 0.08), indMats.steelDark);
       lowerBay.position.set(0, 0.96, -0.22);
       lowerBay.castShadow = true;
-      rig.add(lowerBay);
+      legacyBody.add(lowerBay);
 
       const centerGreenDrum = new THREE.Mesh(new THREE.CylinderGeometry(0.46, 0.46, 0.98, 16), indMats.turbineGreen);
       centerGreenDrum.rotation.z = Math.PI / 2;
       centerGreenDrum.position.set(0, 0.88, 0.88);
       centerGreenDrum.castShadow = true;
-      rig.add(centerGreenDrum);
+      legacyBody.add(centerGreenDrum);
 
       // Twin Pressurized Horizontal Saddle Tanks with Orange Straps & Front Elbow Pipes
-      addPressureTank(rig, -1.04, 0.94, 0.25, 0.34, 1.02, true, indMats.domeCream, indMats.indOrange);
-      addPressureTank(rig, 1.04, 0.94, 0.25, 0.34, 1.02, true, indMats.domeCream, indMats.indOrange);
-      addPipeRun(rig, [[-1.62, 0.94, 0.25], [-1.72, 0.42, 0.88], [-1.2, 0.42, 1.15]], 0.075, indMats.safetyYellow);
-      addPipeRun(rig, [[1.62, 0.94, 0.25], [1.72, 0.42, 0.88], [1.2, 0.42, 1.15]], 0.075, indMats.safetyYellow);
+      addPressureTank(legacyBody, -1.04, 0.94, 0.25, 0.34, 1.02, true, indMats.domeCream, indMats.indOrange);
+      addPressureTank(legacyBody, 1.04, 0.94, 0.25, 0.34, 1.02, true, indMats.domeCream, indMats.indOrange);
+      addPipeRun(legacyBody, [[-1.62, 0.94, 0.25], [-1.72, 0.42, 0.88], [-1.2, 0.42, 1.15]], 0.075, indMats.safetyYellow);
+      addPipeRun(legacyBody, [[1.62, 0.94, 0.25], [1.72, 0.42, 0.88], [1.2, 0.42, 1.15]], 0.075, indMats.safetyYellow);
 
       // Cantilevered 2nd-Story Deck with Safety Amber Rails & Open Coolant Chute Gap + Side Balcony Sub-Tower
-      addCantileverDeck(rig, 3.04, 2.75, 1.98, 0.36, indMats.safetyYellow, true);
-      addLadder(rig, -1.48, 0.36, 2.02, -0.45, -Math.PI / 2, indMats.safetyYellow);
-      addSideBalconyTower(rig, 1.48, -0.78, 2.45, 0.58, indMats.steelMid, indMats.safetyYellow, indMats.glowCyan);
+      addCantileverDeck(legacyBody, 3.04, 2.75, 1.98, 0.36, indMats.safetyYellow, true);
+      addLadder(legacyBody, -1.48, 0.36, 2.02, -0.45, -Math.PI / 2, indMats.safetyYellow);
+      addSideBalconyTower(legacyBody, 1.48, -0.78, 2.45, 0.58, indMats.steelMid, indMats.safetyYellow, indMats.glowCyan);
 
       // Towering 3rd-Story Ribbed Cream Domed Silo + Glowing Cyan Conduit Rings + Cascading Coolant Chute
-      addSiloSuperstructure(rig, -0.1, 2.06, -0.22, 0.98, 1.38, indMats.domeCream, indMats.domeCream, indMats.glowCyan);
-      addCoolantChute(rig, -0.1, 2.52, 0.72, 0, indMats.coolantChute);
-      addPipeRun(rig, [[-1.04, 1.3, 0.25], [-1.18, 2.95, -0.22], [-0.95, 3.25, -0.22]], 0.09, indMats.domeCream);
-      addPipeRun(rig, [[1.04, 1.3, 0.25], [1.18, 2.55, 0.05], [0.82, 2.65, -0.22]], 0.075, indMats.brass);
-      addElbowStack(rig, -0.58, 3.55, -0.72, 0.95, 0.2, indMats.safetyYellow, indMats.steelDark);
+      addSiloSuperstructure(legacyBody, -0.1, 2.06, -0.22, 0.98, 1.38, indMats.domeCream, indMats.domeCream, indMats.glowCyan);
+      addCoolantChute(legacyBody, -0.1, 2.52, 0.72, 0, indMats.coolantChute);
+      addPipeRun(legacyBody, [[-1.04, 1.3, 0.25], [-1.18, 2.95, -0.22], [-0.95, 3.25, -0.22]], 0.09, indMats.domeCream);
+      addPipeRun(legacyBody, [[1.04, 1.3, 0.25], [1.18, 2.55, 0.05], [0.82, 2.65, -0.22]], 0.075, indMats.brass);
+      addElbowStack(legacyBody, -0.58, 3.55, -0.72, 0.95, 0.2, indMats.safetyYellow, indMats.steelDark);
 
       const rotorPivot = new THREE.Group();
       rotorPivot.position.set(0, 0.88, 1.24);
@@ -2865,101 +2888,121 @@
       goldBar.position.set(0.55, 0.45, 1.2);
       rig.add(goldBar);
       anim.smokeOrigin = { lx: -0.26, ly: 4.95, lz: -0.72, col: 0xfef08a };
+      if (window.ModelAssetManager) {
+        window.ModelAssetManager.registerMachineMount(def, rig, legacyBody, 0.16, () => {
+          rotorPivot.position.set(-0.05, 0.82, 1.06);
+          anim.smokeOrigin = { lx: -0.68, ly: 1.82, lz: -0.78, col: 0xfef08a };
+        });
+      }
 
     } else if (def.id === "crystal_processor") {
-      // 9. CRYSTAL PROCESSOR COMPLEX (~4.9u tall): Stepped Cooling Plinth + Louver Bay + Mezzanine + Cryo Silo + Twin Laser Gimbals
-      addSteppedPlinth(rig, 2.98, 2.78, true, indMats.concreteBase);
+      // 9. CRYSTAL PROCESSOR COMPLEX (upgraded to Kenney building-h + detail-tank-large + rooftop crystal gimbal)
+      const legacyBody = new THREE.Group();
+      rig.add(legacyBody);
+      addSteppedPlinth(legacyBody, 2.98, 2.78, true, indMats.concreteBase);
 
       const baseBay = new THREE.Mesh(makeRoundedBoxGeo(2.38, 1.28, 1.98, 0.08), indMats.panelBlue);
       baseBay.position.set(0, 0.98, -0.1);
       baseBay.castShadow = true;
-      rig.add(baseBay);
+      legacyBody.add(baseBay);
 
       const coolPod = new THREE.Mesh(makeRoundedBoxGeo(1.12, 0.88, 0.78, 0.08), indMats.domeCream);
       coolPod.position.set(0.42, 0.82, 0.92);
       coolPod.castShadow = true;
-      rig.add(coolPod);
+      legacyBody.add(coolPod);
       const coolVent = new THREE.Mesh(makeRoundedBoxGeo(0.72, 0.5, 0.06, 0.01), indMats.vents);
       coolVent.position.set(0.42, 0.84, 1.31);
-      rig.add(coolVent);
+      legacyBody.add(coolVent);
       const podLight = new THREE.Mesh(makeRoundedBoxGeo(0.24, 0.46, 0.08, 0.01), indMats.glowCyan);
       podLight.position.set(-0.35, 0.84, 0.94);
-      rig.add(podLight);
+      legacyBody.add(podLight);
 
-      addPressureTank(rig, -1.04, 1.05, 0.35, 0.28, 0.92, true, indMats.domeCream, indMats.indOrange);
-      addCantileverDeck(rig, 2.94, 2.58, 1.96, 0.36, indMats.safetyYellow, false);
-      addLadder(rig, 1.44, 0.36, 2.0, 0.2, Math.PI / 2, indMats.safetyYellow);
-      addSideBalconyTower(rig, -1.42, -0.78, 2.38, 0.52, indMats.panelBlue, indMats.safetyYellow, indMats.glowCyan);
+      addPressureTank(legacyBody, -1.04, 1.05, 0.35, 0.28, 0.92, true, indMats.domeCream, indMats.indOrange);
+      addCantileverDeck(legacyBody, 2.94, 2.58, 1.96, 0.36, indMats.safetyYellow, false);
+      addLadder(legacyBody, 1.44, 0.36, 2.0, 0.2, Math.PI / 2, indMats.safetyYellow);
+      addSideBalconyTower(legacyBody, -1.42, -0.78, 2.38, 0.52, indMats.panelBlue, indMats.safetyYellow, indMats.glowCyan);
 
       // Upper Cryo Chamber Crown + Triple Gimbal Rings + Levitating Prism
       [-0.86, 0.86].forEach((px) => {
         const pylon = new THREE.Mesh(makeRoundedBoxGeo(0.24, 1.95, 0.24, 0.04), indMats.steelMid);
         pylon.position.set(px, 3.0, 0);
         pylon.castShadow = true;
-        rig.add(pylon);
+        legacyBody.add(pylon);
       });
       const crownRing = new THREE.Mesh(new THREE.CylinderGeometry(0.72, 0.95, 0.42, 16), indMats.domeCream);
       crownRing.position.set(0, 4.18, 0);
       crownRing.castShadow = true;
-      rig.add(crownRing);
+      legacyBody.add(crownRing);
       const crownCap = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.72, 0.36, 16), indMats.glowCyan);
       crownCap.position.set(0, 4.56, 0);
-      rig.add(crownCap);
+      legacyBody.add(crownCap);
 
-      addPipeRun(rig, [[-1.04, 1.38, 0.35], [-1.04, 2.55, -0.4], [-0.45, 3.98, 0]], 0.07, indMats.chrome);
+      addPipeRun(legacyBody, [[-1.04, 1.38, 0.35], [-1.04, 2.55, -0.4], [-0.45, 3.98, 0]], 0.07, indMats.chrome);
+
+      const fxMount = new THREE.Group();
+      fxMount.position.set(0, 3.05, 0);
+      rig.add(fxMount);
 
       const ringA = new THREE.Mesh(new THREE.TorusGeometry(0.84, 0.062, 10, 26), indMats.glowCyan);
-      ringA.position.y = 3.05;
-      rig.add(ringA);
+      fxMount.add(ringA);
       const ringB = new THREE.Mesh(new THREE.TorusGeometry(0.64, 0.052, 10, 24), indMats.brass);
-      ringB.position.y = 3.05;
       ringB.rotation.y = Math.PI / 2;
-      rig.add(ringB);
+      fxMount.add(ringB);
       anim.rotParts.push({ mesh: ringA, axis: "x", speed: 2.6 });
       anim.rotParts.push({ mesh: ringB, axis: "y", speed: 3.4 });
 
       const gem = new THREE.Mesh(crystalPrismGeo, pbrMat(0x67e8f9, { emissive: 0x22d3ee, emissiveIntensity: 0.82, roughness: 0.12, metalness: 0.22 }));
       gem.scale.setScalar(0.82);
-      gem.position.y = 3.05;
-      rig.add(gem);
+      fxMount.add(gem);
       anim.rotParts.push({ mesh: gem, axis: "y", speed: 2.0 });
+      if (window.ModelAssetManager) {
+        window.ModelAssetManager.registerMachineMount(def, rig, legacyBody, 0.16, (metrics) => {
+          fxMount.position.set(metrics.mainX, metrics.mainTopY + 0.86, metrics.mainZ);
+        });
+      }
 
     } else if (def.id === "industrial_factory") {
-      // 10. INDUSTRIAL MEGA-FACTORY (~5.1u tall): 3-Tier Complex + Twin Boilers + Mezzanine + Robotic Assembly Arms + Domed Silo & Twin Smokestacks
-      addSteppedPlinth(rig, 3.02, 2.9, true, indMats.concreteBase);
+      // 10. INDUSTRIAL MEGA-FACTORY (upgraded to Kenney building-p + twin chimneys + container-b + rooftop welder arms)
+      const legacyBody = new THREE.Group();
+      rig.add(legacyBody);
+      addSteppedPlinth(legacyBody, 3.02, 2.9, true, indMats.concreteBase);
 
       const bay = new THREE.Mesh(makeRoundedBoxGeo(2.42, 1.32, 2.04, 0.08), indMats.panelBlue);
       bay.position.set(0, 1.0, -0.1);
       bay.castShadow = true;
-      rig.add(bay);
+      legacyBody.add(bay);
 
       const frontModule = new THREE.Mesh(makeRoundedBoxGeo(1.22, 0.88, 0.78, 0.08), indMats.domeCream);
       frontModule.position.set(0.45, 0.8, 0.98);
       frontModule.castShadow = true;
-      rig.add(frontModule);
+      legacyBody.add(frontModule);
       const frontVent = new THREE.Mesh(makeRoundedBoxGeo(0.84, 0.52, 0.06, 0.01), indMats.vents);
       frontVent.position.set(0.45, 0.82, 1.38);
-      rig.add(frontVent);
-      addPressureTank(rig, -1.04, 0.96, 0.35, 0.3, 0.98, true, indMats.domeCream, indMats.indOrange);
+      legacyBody.add(frontVent);
+      addPressureTank(legacyBody, -1.04, 0.96, 0.35, 0.3, 0.98, true, indMats.domeCream, indMats.indOrange);
 
       const glowStrip = new THREE.Mesh(makeRoundedBoxGeo(2.48, 0.12, 2.08, 0.02), indMats.glowCyan);
       glowStrip.position.set(0, 1.66, -0.1);
-      rig.add(glowStrip);
+      legacyBody.add(glowStrip);
 
       // 2nd-Story Structural Mezzanine Deck + Side Tower + Ladder
-      addCantileverDeck(rig, 3.04, 2.74, 1.98, 0.36, indMats.safetyYellow, false);
-      addLadder(rig, 1.48, 0.36, 2.02, 0.35, Math.PI / 2, indMats.safetyYellow);
-      addSideBalconyTower(rig, -1.46, -0.78, 2.42, 0.54, indMats.steelMid, indMats.safetyYellow, indMats.glowCyan);
+      addCantileverDeck(legacyBody, 3.04, 2.74, 1.98, 0.36, indMats.safetyYellow, false);
+      addLadder(legacyBody, 1.48, 0.36, 2.02, 0.35, Math.PI / 2, indMats.safetyYellow);
+      addSideBalconyTower(legacyBody, -1.46, -0.78, 2.42, 0.54, indMats.steelMid, indMats.safetyYellow, indMats.glowCyan);
 
       // 3rd-Tier Domed Assembly Reactor + Twin Elbow Smokestacks + Articulated Robotic Arms
-      addSiloSuperstructure(rig, 0, 2.06, -0.48, 0.72, 1.18, indMats.domeCream, indMats.panelBlue, indMats.glowCyan);
-      addElbowStack(rig, 0.96, 2.06, -0.82, 2.38, 0.22, indMats.steelDark, indMats.indOrange);
-      addElbowStack(rig, -0.96, 2.06, -0.82, 1.95, 0.18, indMats.steelDark, indMats.safetyYellow);
-      addPipeRun(rig, [[-0.96, 3.15, -0.82], [0, 3.55, -0.48], [0.96, 3.35, -0.82]], 0.08, indMats.chrome);
+      addSiloSuperstructure(legacyBody, 0, 2.06, -0.48, 0.72, 1.18, indMats.domeCream, indMats.panelBlue, indMats.glowCyan);
+      addElbowStack(legacyBody, 0.96, 2.06, -0.82, 2.38, 0.22, indMats.steelDark, indMats.indOrange);
+      addElbowStack(legacyBody, -0.96, 2.06, -0.82, 1.95, 0.18, indMats.steelDark, indMats.safetyYellow);
+      addPipeRun(legacyBody, [[-0.96, 3.15, -0.82], [0, 3.55, -0.48], [0.96, 3.35, -0.82]], 0.08, indMats.chrome);
+
+      const fxMount = new THREE.Group();
+      fxMount.position.set(0, 2.08, 0.62);
+      rig.add(fxMount);
 
       [-0.56, 0.64].forEach((ax, ai) => {
         const armBase = new THREE.Group();
-        armBase.position.set(ax, 2.08, 0.62);
+        armBase.position.set(ax, 0, 0);
         const pedestal = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.26, 0.26, 10), indMats.steelMid);
         armBase.add(pedestal);
         const upper = new THREE.Mesh(makeCapsuleGeo(0.095, 0.92, 8), indMats.safetyYellow);
@@ -2975,77 +3018,95 @@
         head.scale.setScalar(0.16);
         head.position.set(ai === 0 ? 0.28 : -0.28, 0.9, 0.46);
         armBase.add(head);
-        rig.add(armBase);
+        fxMount.add(armBase);
         anim.rotParts.push({ mesh: armBase, axis: "y", speed: ai === 0 ? 2.4 : -2.4 });
       });
 
-      addBoltsInstanced(rig, [
+      addBoltsInstanced(legacyBody, [
         [-1.36, 2.08, 1.15], [1.36, 2.08, 1.15], [-1.36, 2.08, -1.15], [1.36, 2.08, -1.15]
       ]);
       anim.smokeOrigin = { lx: 1.32, ly: 4.86, lz: -0.82, col: 0xe879f9 };
+      if (window.ModelAssetManager) {
+        window.ModelAssetManager.registerMachineMount(def, rig, legacyBody, 0.16, (metrics) => {
+          fxMount.position.set(0, metrics.mainTopY + 0.08, -0.18);
+          anim.smokeOrigin = { lx: 0.92, ly: 1.45, lz: -0.82, col: 0xe879f9 };
+        });
+      }
 
     } else if (def.id === "crystal_synthesizer") {
-      // 11. AETHER-QUARTZ CRYSTAL SYNTHESIZER (~4.9u tall): 3-Tier Resonance Plant + Twin Cryo-Tanks + Mezzanine + Dual Emitter Dishes + Levitating Core
-      addSteppedPlinth(rig, 2.98, 2.84, true, indMats.concreteBase);
+      // 11. AETHER-QUARTZ CRYSTAL SYNTHESIZER (upgraded to Kenney building-j + solar-panel-portrait + resonator rings)
+      const legacyBody = new THREE.Group();
+      rig.add(legacyBody);
+      addSteppedPlinth(legacyBody, 2.98, 2.84, true, indMats.concreteBase);
 
       const lowerDeck = new THREE.Mesh(makeRoundedBoxGeo(2.38, 1.24, 1.98, 0.08), indMats.domeCream);
       lowerDeck.position.set(0, 0.96, -0.1);
       lowerDeck.castShadow = true;
-      rig.add(lowerDeck);
+      legacyBody.add(lowerDeck);
 
       const frontVents = new THREE.Mesh(makeRoundedBoxGeo(1.1, 0.56, 0.08, 0.02), indMats.vents);
       frontVents.position.set(0, 0.92, 0.91);
-      rig.add(frontVents);
-      addPressureTank(rig, -1.04, 1.0, 0.28, 0.3, 0.96, true, indMats.panelBlue, indMats.brass);
-      addPressureTank(rig, 1.04, 1.0, 0.28, 0.3, 0.96, true, indMats.panelBlue, indMats.brass);
+      legacyBody.add(frontVents);
+      addPressureTank(legacyBody, -1.04, 1.0, 0.28, 0.3, 0.96, true, indMats.panelBlue, indMats.brass);
+      addPressureTank(legacyBody, 1.04, 1.0, 0.28, 0.3, 0.96, true, indMats.panelBlue, indMats.brass);
 
-      addCantileverDeck(rig, 2.98, 2.66, 1.94, 0.36, indMats.safetyYellow, true);
-      addLadder(rig, -1.46, 0.36, 1.98, -0.35, -Math.PI / 2, indMats.safetyYellow);
-      addSideBalconyTower(rig, 1.46, -0.78, 2.42, 0.54, indMats.panelBlue, indMats.safetyYellow, indMats.glowCyan);
+      addCantileverDeck(legacyBody, 2.98, 2.66, 1.94, 0.36, indMats.safetyYellow, true);
+      addLadder(legacyBody, -1.46, 0.36, 1.98, -0.35, -Math.PI / 2, indMats.safetyYellow);
+      addSideBalconyTower(legacyBody, 1.46, -0.78, 2.42, 0.54, indMats.panelBlue, indMats.safetyYellow, indMats.glowCyan);
 
       // Upper Domed Condenser Core + Dual Rotating Torus Resonance Rings
-      addSiloSuperstructure(rig, -0.08, 2.02, -0.45, 0.68, 1.12, indMats.panelBlue, indMats.domeCream, indMats.glowCyan);
-      addCoolantChute(rig, -0.08, 2.42, 0.25, 0, indMats.coolantChute);
-      addElbowStack(rig, -0.96, 2.02, -0.78, 1.92, 0.18, indMats.steelDark, indMats.brass);
+      addSiloSuperstructure(legacyBody, -0.08, 2.02, -0.45, 0.68, 1.12, indMats.panelBlue, indMats.domeCream, indMats.glowCyan);
+      addCoolantChute(legacyBody, -0.08, 2.42, 0.25, 0, indMats.coolantChute);
+      addElbowStack(legacyBody, -0.96, 2.02, -0.78, 1.92, 0.18, indMats.steelDark, indMats.brass);
+
+      const fxMount = new THREE.Group();
+      fxMount.position.set(0, 3.68, 0.12);
+      rig.add(fxMount);
 
       const dishRing = new THREE.Mesh(
         new THREE.TorusGeometry(0.92, 0.072, 10, 26),
         metalMat(0xf472b6, { emissive: 0xdb2777, emissiveIntensity: 0.55 })
       );
-      dishRing.position.set(0, 3.68, 0.12);
-      rig.add(dishRing);
+      fxMount.add(dishRing);
       anim.rotParts.push({ mesh: dishRing, axis: "y", speed: 2.8 });
 
       const dishRingInner = new THREE.Mesh(new THREE.TorusGeometry(0.68, 0.052, 10, 24), indMats.glowCyan);
-      dishRingInner.position.set(0, 3.68, 0.12);
       dishRingInner.rotation.x = Math.PI / 3;
-      rig.add(dishRingInner);
+      fxMount.add(dishRingInner);
       anim.rotParts.push({ mesh: dishRingInner, axis: "z", speed: -3.2 });
 
       const prism = new THREE.Mesh(crystalPrismGeo, pbrMat(0x7dd3fc, { emissive: 0x38bdf8, emissiveIntensity: 0.9, roughness: 0.14 }));
       prism.scale.setScalar(0.86);
-      prism.position.set(0, 3.68, 0.12);
-      rig.add(prism);
+      fxMount.add(prism);
       anim.rotParts.push({ mesh: prism, axis: "x", speed: 2.0 });
-      addPipeRun(rig, [[-1.04, 1.36, 0.28], [-1.04, 2.85, -0.35], [-0.45, 3.45, -0.35]], 0.07, indMats.chrome);
+      addPipeRun(legacyBody, [[-1.04, 1.36, 0.28], [-1.04, 2.85, -0.35], [-0.45, 3.45, -0.35]], 0.07, indMats.chrome);
       anim.smokeOrigin = { lx: -0.68, ly: 4.35, lz: -0.78, col: 0xf472b6 };
+      if (window.ModelAssetManager) {
+        window.ModelAssetManager.registerMachineMount(def, rig, legacyBody, 0.16, (metrics) => {
+          fxMount.position.set(metrics.mainX, metrics.mainTopY + 0.88, metrics.mainZ);
+          anim.smokeOrigin = null;
+        });
+      }
 
     } else {
-      // 12. TITAN ALLOY SUPER-FORGE (~5.2u tall): Stepped Megalith Plinth + Twin Giant Geared Flywheels + 2nd-Story Foundry Deck + Plasma Dome + Dual Stacks
-      addSteppedPlinth(rig, 3.04, 2.92, true, indMats.concreteBase);
+      // 12. TITAN ALLOY SUPER-FORGE (upgraded to Kenney building-t + container-a + flanking brass flywheels + plasma core)
+      const legacyBody = new THREE.Group();
+      rig.add(legacyBody);
+      addSteppedPlinth(legacyBody, 3.04, 2.92, true, indMats.concreteBase);
 
       const hull = new THREE.Mesh(makeRoundedBoxGeo(2.42, 1.38, 2.06, 0.08), indMats.steelMid);
       hull.position.set(0, 1.04, -0.08);
       hull.castShadow = true;
-      rig.add(hull);
+      legacyBody.add(hull);
 
       const frontCore = new THREE.Mesh(makeRoundedBoxGeo(1.06, 0.88, 0.65, 0.06), indMats.steelDark);
       frontCore.position.set(0, 0.84, 0.96);
-      rig.add(frontCore);
+      legacyBody.add(frontCore);
       const plasmaSlit = new THREE.Mesh(makeRoundedBoxGeo(0.76, 0.42, 0.1, 0.02), indMats.glowCyan);
       plasmaSlit.position.set(0, 0.86, 1.26);
-      rig.add(plasmaSlit);
+      legacyBody.add(plasmaSlit);
 
+      const flywheels = [];
       [-1.24, 1.24].forEach((gx, gi) => {
         const fly = new THREE.Mesh(gearWheelGeo, indMats.brass);
         fly.scale.setScalar(2.05);
@@ -3053,29 +3114,42 @@
         fly.position.set(gx, 1.42, 0.05);
         fly.castShadow = true;
         rig.add(fly);
+        flywheels.push(fly);
         anim.rotParts.push({ mesh: fly, axis: "x", speed: gi === 0 ? 3.2 : -3.2 });
       });
 
-      addCantileverDeck(rig, 3.04, 2.74, 2.04, 0.36, indMats.safetyYellow, false);
-      addLadder(rig, 1.48, 0.36, 2.08, 0.42, Math.PI / 2, indMats.safetyYellow);
-      addSideBalconyTower(rig, -1.46, -0.76, 2.52, 0.56, indMats.steelDark, indMats.safetyYellow, indMats.glowCyan);
+      addCantileverDeck(legacyBody, 3.04, 2.74, 2.04, 0.36, indMats.safetyYellow, false);
+      addLadder(legacyBody, 1.48, 0.36, 2.08, 0.42, Math.PI / 2, indMats.safetyYellow);
+      addSideBalconyTower(legacyBody, -1.46, -0.76, 2.52, 0.56, indMats.steelDark, indMats.safetyYellow, indMats.glowCyan);
 
       // 3rd-Tier Ribbed Plasma Dome + Cage Pillars + Spinning Arc Core + Twin Brass Stacks
-      addSiloSuperstructure(rig, 0, 2.12, -0.22, 0.88, 1.38, indMats.steelDark, indMats.domeCream, indMats.glowCyan);
+      addSiloSuperstructure(legacyBody, 0, 2.12, -0.22, 0.88, 1.38, indMats.steelDark, indMats.domeCream, indMats.glowCyan);
+      const fxMount = new THREE.Group();
+      fxMount.position.set(0, 4.35, -0.22);
+      rig.add(fxMount);
       const arcCageRing = new THREE.Mesh(new THREE.TorusGeometry(0.68, 0.055, 8, 22), indMats.brass);
       arcCageRing.rotation.x = Math.PI / 2;
-      arcCageRing.position.set(0, 4.35, -0.22);
-      rig.add(arcCageRing);
+      fxMount.add(arcCageRing);
       const arcCore = new THREE.Mesh(octaGeo, indMats.glowCyan);
       arcCore.scale.setScalar(0.56);
-      arcCore.position.set(0, 4.42, -0.22);
-      rig.add(arcCore);
+      arcCore.position.set(0, 0.07, 0);
+      fxMount.add(arcCore);
       anim.rotParts.push({ mesh: arcCore, axis: "y", speed: 4.0 });
 
-      addElbowStack(rig, 0.96, 2.12, -0.8, 2.45, 0.24, indMats.copper, indMats.brass);
-      addElbowStack(rig, -0.96, 2.12, -0.8, 2.1, 0.2, indMats.copper, indMats.brass);
-      addPipeRun(rig, [[-0.96, 3.25, -0.8], [0, 3.65, -0.22], [0.96, 3.45, -0.8]], 0.085, indMats.brass);
+      addElbowStack(legacyBody, 0.96, 2.12, -0.8, 2.45, 0.24, indMats.copper, indMats.brass);
+      addElbowStack(legacyBody, -0.96, 2.12, -0.8, 2.1, 0.2, indMats.copper, indMats.brass);
+      addPipeRun(legacyBody, [[-0.96, 3.25, -0.8], [0, 3.65, -0.22], [0.96, 3.45, -0.8]], 0.085, indMats.brass);
       anim.smokeOrigin = { lx: 1.34, ly: 5.02, lz: -0.8, col: 0x38bdf8 };
+      if (window.ModelAssetManager) {
+        window.ModelAssetManager.registerMachineMount(def, rig, legacyBody, 0.16, (metrics) => {
+          flywheels.forEach((f) => {
+            f.position.y = 1.08;
+            f.position.z = -0.18;
+          });
+          fxMount.position.set(metrics.mainX, metrics.mainTopY + 0.72, metrics.mainZ);
+          anim.smokeOrigin = { lx: metrics.mainX, ly: metrics.mainTopY + 0.95, lz: metrics.mainZ, col: 0x38bdf8 };
+        });
+      }
     }
 
     getBiomeChunk(def.biome).add(grp);
@@ -4589,7 +4663,7 @@
 
     const sceneryDeps = {
       texRock, texFoliage, texBark,
-      organicRockGeoA, organicRockGeoB, crystalPrismGeo, gearWheelGeo, indMats
+      organicRockGeoA, organicRockGeoB, crystalPrismGeo, gearWheelGeo, indMats, addObstacle
     };
     BIOMES.forEach((b, bi) => {
       if (b.id === "forest") return; // Map 1 preserved untouched
@@ -4928,7 +5002,11 @@
       const b = BIOMES[i];
       const cg = biomeChunkGroups[b.id];
       if (!cg) continue;
-      cg.visible = (isMenuMode && b.id === "forest") || Math.hypot(px - b.cx, pz - b.cz) < 78;
+      const vis = (isMenuMode && b.id === "forest") || Math.hypot(px - b.cx, pz - b.cz) < 78;
+      cg.visible = vis;
+      if (vis && !isMenuMode && b.id !== "forest" && window.ModelAssetManager) {
+        window.ModelAssetManager.ensureBiomeAssets(THREE, b.id);
+      }
     }
   }
 
@@ -4941,6 +5019,7 @@
       camPointers.clear();
     } else {
       ensureAudio();
+      updateWorldStreaming(playerGroup.position.x, playerGroup.position.z);
     }
   };
 

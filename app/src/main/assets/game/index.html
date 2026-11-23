@@ -187,7 +187,7 @@
       let idx = 0;
       function tryLoadNext() {
         if (window.THREE) {
-          bootGameScript();
+          loadGltfLoaderAndBoot();
           return;
         }
         if (idx >= cdnUrls.length) {
@@ -198,24 +198,56 @@
         const s = document.createElement("script");
         s.src = cdnUrls[idx++];
         s.onload = function () {
-          if (window.THREE) bootGameScript();
+          if (window.THREE) loadGltfLoaderAndBoot();
           else tryLoadNext();
         };
         s.onerror = tryLoadNext;
         document.head.appendChild(s);
       }
-      function bootGameScript() {
-        const envScript = document.createElement("script");
-        envScript.src = "biomeEnvironments.js";
-        envScript.onload = envScript.onerror = function () {
-          const g = document.createElement("script");
-          g.src = "game.js";
-          g.onerror = function () {
-            document.getElementById("loading-text").textContent = "Failed to load game.js";
+      function loadGltfLoaderAndBoot() {
+        if (window.THREE && window.THREE.GLTFLoader) {
+          bootGameScript();
+          return;
+        }
+        const loaderUrls = [
+          "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js",
+          "https://unpkg.com/three@0.128.0/examples/js/loaders/GLTFLoader.js",
+          "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/js/loaders/GLTFLoader.min.js"
+        ];
+        let lIdx = 0;
+        function tryNextLoader() {
+          if ((window.THREE && window.THREE.GLTFLoader) || lIdx >= loaderUrls.length) {
+            bootGameScript();
+            return;
+          }
+          const ls = document.createElement("script");
+          ls.src = loaderUrls[lIdx++];
+          ls.onload = function () {
+            if (window.THREE && window.THREE.GLTFLoader) bootGameScript();
+            else tryNextLoader();
           };
-          document.body.appendChild(g);
+          ls.onerror = tryNextLoader;
+          document.head.appendChild(ls);
+        }
+        tryNextLoader();
+      }
+      function bootGameScript() {
+        const assetScript = document.createElement("script");
+        assetScript.src = "modelAssetManager.js";
+        assetScript.onload = assetScript.onerror = function () {
+          const envScript = document.createElement("script");
+          envScript.src = "biomeEnvironments.js";
+          envScript.onload = envScript.onerror = function () {
+            const g = document.createElement("script");
+            g.src = "game.js";
+            g.onerror = function () {
+              document.getElementById("loading-text").textContent = "Failed to load game.js";
+            };
+            document.body.appendChild(g);
+          };
+          document.body.appendChild(envScript);
         };
-        document.body.appendChild(envScript);
+        document.body.appendChild(assetScript);
       }
       tryLoadNext();
     })();

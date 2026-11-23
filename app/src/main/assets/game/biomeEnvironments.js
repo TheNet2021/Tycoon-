@@ -759,7 +759,7 @@
       })));
     }
 
-    // 3. Universal Instanced Boulders tailored to each biome's palette
+    // 3. Universal Instanced Boulders tailored to each biome's palette (upgraded via Kenney Mini Forest rocks/stones)
     const rockPts = scatterPoints(26, 10, 0.65);
     const rockMat = new THREE.MeshStandardMaterial({
       color: 0xffffff,
@@ -776,7 +776,7 @@
       biome.id === "ancient_machine_world" ? [0x475569, 0x334155, 0x64748b] :
       [0x738090, 0x64748b, 0x8694a3];
 
-    placeInstances(
+    const rockInst = placeInstances(
       THREE, chunkGrp, organicRockGeoA, rockMat,
       rockPts.map((p) => ({
         x: p.x, y: p.y + 0.16 * p.sc, z: p.z,
@@ -784,6 +784,56 @@
       })),
       rockCols
     );
+
+    const sceneryUpgradePlan = {
+      rockPts: biome.id !== "ancient_machine_world" ? rockPts : null,
+      rockCols: (biome.id === "mountains" || biome.id === "jungle") ? null : rockCols,
+      rockPlaceholders: rockInst ? [rockInst] : [],
+      treePts: null,
+      treeTints: null,
+      treePlaceholders: [],
+      plantPts: null,
+      plantTints: null,
+      plantPlaceholders: [],
+      extraStonePts: scatterPoints(18, 290, 0.45),
+      campSpot: null,
+      fenceSpot: null
+    };
+
+    function findSafeCampSpot(seedOffset, minRad) {
+      const candidates = [
+        [-9.2, 8.8], [9.2, 8.8], [-9.4, -8.8], [9.4, -8.8],
+        [-11.0, 6.2], [11.0, 6.2], [6.4, -10.8], [-6.4, -10.8]
+      ];
+      for (let i = 0; i < candidates.length; i++) {
+        const [cx, cz] = candidates[i];
+        if (isSafeSpot(cx, cz, minRad)) {
+          return {
+            lx: cx,
+            lz: cz,
+            x: biome.cx + cx,
+            y: sampleBiomeTerrainLocalY(biome.id, cx, cz, bi, pads),
+            z: biome.cz + cz,
+            ry: Math.atan2(-cx, -cz)
+          };
+        }
+      }
+      const fallback = scatterPoints(1, seedOffset, minRad);
+      if (fallback.length > 0) {
+        const p = fallback[0];
+        return { lx: p.lx, lz: p.lz, x: p.x, y: p.y, z: p.z, ry: Math.atan2(-p.lx, -p.lz) };
+      }
+      return null;
+    }
+
+    if (biome.id === "mountains" || biome.id === "desert" || biome.id === "frozen" || biome.id === "jungle") {
+      sceneryUpgradePlan.campSpot = findSafeCampSpot(315, 2.05);
+      if (sceneryUpgradePlan.campSpot && deps.addObstacle) {
+        deps.addObstacle(sceneryUpgradePlan.campSpot.x, sceneryUpgradePlan.campSpot.z, 1.05);
+      }
+    } else if (biome.id === "toxic_swamp") {
+      sceneryUpgradePlan.fenceSpot = findSafeCampSpot(330, 1.65);
+    }
 
     // 4. Biome-specific dense flora, structures & formations
     if (biome.id === "mountains" || biome.id === "frozen" || biome.id === "frozen_mountains") {
@@ -796,16 +846,21 @@
       const pineMat = new THREE.MeshStandardMaterial({ color: 0xffffff, map: texFoliage, roughness: 0.78, flatShading: true });
       const pineCols = isIcy ? [0x67c5c9, 0x99e6ea, 0x4ea8b5] : [0x1b6e3c, 0x238a4b, 0x155930];
 
-      placeInstances(THREE, chunkGrp, trunkGeo, trunkMat, treePts.map((p) => ({ x: p.x, y: p.y + 0.62 * p.sc, z: p.z, sx: p.sc, sy: p.sc, sz: p.sc })));
-      placeInstances(THREE, chunkGrp, pineGeoLow, pineMat, treePts.map((p) => ({ x: p.x, y: p.y + 1.55 * p.sc, z: p.z, ry: p.rot, sx: p.sc, sy: p.sc, sz: p.sc })), pineCols);
-      placeInstances(THREE, chunkGrp, pineGeoTop, pineMat, treePts.map((p) => ({ x: p.x, y: p.y + 2.30 * p.sc, z: p.z, ry: p.rot + 0.5, sx: p.sc, sy: p.sc, sz: p.sc })), pineCols);
+      const tInst = placeInstances(THREE, chunkGrp, trunkGeo, trunkMat, treePts.map((p) => ({ x: p.x, y: p.y + 0.62 * p.sc, z: p.z, sx: p.sc, sy: p.sc, sz: p.sc })));
+      const pLowInst = placeInstances(THREE, chunkGrp, pineGeoLow, pineMat, treePts.map((p) => ({ x: p.x, y: p.y + 1.55 * p.sc, z: p.z, ry: p.rot, sx: p.sc, sy: p.sc, sz: p.sc })), pineCols);
+      const pTopInst = placeInstances(THREE, chunkGrp, pineGeoTop, pineMat, treePts.map((p) => ({ x: p.x, y: p.y + 2.30 * p.sc, z: p.z, ry: p.rot + 0.5, sx: p.sc, sy: p.sc, sz: p.sc })), pineCols);
+      sceneryUpgradePlan.treePts = treePts;
+      sceneryUpgradePlan.treeTints = isIcy ? [0xc8f4f8, 0xe0f7fc, 0xb0ebf2] : null;
+      sceneryUpgradePlan.treePlaceholders = [tInst, pLowInst, pTopInst].filter(Boolean);
 
       if (biome.id === "mountains") {
-        // Alpine scrub & wildflowers
+        // Alpine scrub & wildflowers (upgraded to plant.glb)
         const shrubPts = scatterPoints(24, 58, 0.5);
-        placeInstances(THREE, chunkGrp, organicRockGeoB, pineMat, shrubPts.map((p) => ({
+        const shrubInst = placeInstances(THREE, chunkGrp, organicRockGeoB, pineMat, shrubPts.map((p) => ({
           x: p.x, y: p.y + 0.16 * p.sc, z: p.z, ry: p.rot, sx: 0.52 * p.sc, sy: 0.32 * p.sc, sz: 0.52 * p.sc
         })), [0x4d7c0f, 0x65a30d, 0x3f6212]);
+        sceneryUpgradePlan.plantPts = shrubPts;
+        sceneryUpgradePlan.plantPlaceholders = shrubInst ? [shrubInst] : [];
       } else {
         const shardPts = scatterPoints(26, 65, 0.55);
         const shardMat = new THREE.MeshStandardMaterial({
@@ -907,21 +962,28 @@
     } else if (biome.id === "jungle") {
       const fernPts = scatterPoints(36, 150, 0.55);
       const fernMat = new THREE.MeshStandardMaterial({ color: 0xffffff, map: texFoliage, roughness: 0.75 });
-      placeInstances(THREE, chunkGrp, organicRockGeoB, fernMat, fernPts.map((p) => ({
+      const fernInst = placeInstances(THREE, chunkGrp, organicRockGeoB, fernMat, fernPts.map((p) => ({
         x: p.x, y: p.y + 0.24 * p.sc, z: p.z, ry: p.rot, sx: 0.68 * p.sc, sy: 0.44 * p.sc, sz: 0.68 * p.sc
       })), [0x15803d, 0x16a34a, 0x0d9488]);
 
       const palmPts = scatterPoints(22, 165, 0.85);
       const trunkMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(0x6b4226).convertSRGBToLinear(), map: texBark });
-      placeInstances(THREE, chunkGrp, new THREE.CylinderGeometry(0.14, 0.24, 2.5, 7), trunkMat, palmPts.map((p) => ({
+      const jT = placeInstances(THREE, chunkGrp, new THREE.CylinderGeometry(0.14, 0.24, 2.5, 7), trunkMat, palmPts.map((p) => ({
         x: p.x, y: p.y + 1.2 * p.sc, z: p.z, sx: p.sc, sy: p.sc, sz: p.sc
       })));
-      placeInstances(THREE, chunkGrp, new THREE.ConeGeometry(1.22, 0.85, 8), fernMat, palmPts.map((p) => ({
+      const jC1 = placeInstances(THREE, chunkGrp, new THREE.ConeGeometry(1.22, 0.85, 8), fernMat, palmPts.map((p) => ({
         x: p.x, y: p.y + 2.5 * p.sc, z: p.z, ry: p.rot, sx: p.sc, sy: p.sc, sz: p.sc
       })), [0x10b981, 0x059669, 0x14b8a6]);
-      placeInstances(THREE, chunkGrp, new THREE.ConeGeometry(0.85, 0.65, 8), fernMat, palmPts.map((p) => ({
+      const jC2 = placeInstances(THREE, chunkGrp, new THREE.ConeGeometry(0.85, 0.65, 8), fernMat, palmPts.map((p) => ({
         x: p.x, y: p.y + 2.95 * p.sc, z: p.z, ry: p.rot + 0.6, sx: p.sc, sy: p.sc, sz: p.sc
       })), [0x34d399, 0x10b981, 0x2dd4bf]);
+
+      sceneryUpgradePlan.plantPts = fernPts;
+      sceneryUpgradePlan.plantTints = [0xd1fae5, 0xecfdf5, 0xa7f3d0];
+      sceneryUpgradePlan.plantPlaceholders = fernInst ? [fernInst] : [];
+      sceneryUpgradePlan.treePts = palmPts;
+      sceneryUpgradePlan.treeTints = [0xbef264, 0xa7f3d0, 0x86efac];
+      sceneryUpgradePlan.treePlaceholders = [jT, jC1, jC2].filter(Boolean);
     } else if (biome.id === "sky_islands") {
       const skyPts = scatterPoints(24, 180, 0.75);
       const bloomMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: new THREE.Color(0x38bdf8).convertSRGBToLinear(), emissiveIntensity: 0.14, roughness: 0.6 });
@@ -931,6 +993,8 @@
       placeInstances(THREE, chunkGrp, organicRockGeoB, bloomMat, skyPts.map((p) => ({
         x: p.x, y: p.y + 1.75 * p.sc, z: p.z, ry: p.rot, sx: 0.85 * p.sc, sy: 0.62 * p.sc, sz: 0.85 * p.sc
       })), [0x7dd3fc, 0xf9a8d4, 0x5eead4]);
+      sceneryUpgradePlan.plantPts = scatterPoints(22, 196, 0.45);
+      sceneryUpgradePlan.plantTints = [0xbae6fd, 0xfbcfe8, 0x99f6e4];
 
       // 3 Satellite Floating Mini-Islands orbiting outer Sky Islands perimeter with tiny trees/gems
       [[-21, -68, 3.2], [21, -68, 2.8], [0, -89, 3.5]].forEach(([ix, iz, rad], si) => {
@@ -964,6 +1028,8 @@
       placeInstances(THREE, chunkGrp, new THREE.CylinderGeometry(0.04, 0.06, 1.15, 5), stemMat, reedPts.map((p) => ({
         x: p.x, y: p.y + 0.48 * p.sc, z: p.z, rx: (p.sc - 1) * 0.2, sx: 1, sy: p.sc, sz: 1
       })));
+      sceneryUpgradePlan.plantPts = scatterPoints(22, 238, 0.45);
+      sceneryUpgradePlan.plantTints = [0xa3e635, 0x84cc16, 0xbef264];
     } else if (biome.id === "ancient_machine_world") {
       const techPts = scatterPoints(26, 250, 0.75);
       placeInstances(THREE, chunkGrp, new THREE.CylinderGeometry(0.32, 0.42, 1.6, 6), indMats.steelMid, techPts.map((p) => ({
@@ -978,6 +1044,129 @@
       placeInstances(THREE, chunkGrp, new THREE.OctahedronGeometry(0.28, 0), relayMat, relayPts.map((p) => ({
         x: p.x, y: p.y + 0.65 * p.sc, z: p.z, ry: p.rot, sx: p.sc, sy: p.sc * 1.4, sz: p.sc
       })), [0x38bdf8, 0x22d3ee, 0xa855f7]);
+    }
+
+    // 5. Register Lazy Kenney Mini Forest GLB Scenery Upgrade for Maps 2-12
+    if (window.ModelAssetManager && biome.id !== "ancient_machine_world") {
+      window.ModelAssetManager.registerBiomeSceneryHook(biome.id, (mgr, THREE_REF) => {
+        const FOR = mgr.FOR;
+        const load = (name) => mgr.loadModel(THREE_REF, FOR + name);
+
+        // 5a. Upgrade boulders -> real rocks-high.glb, rocks-low.glb & stones.glb InstancedMeshes
+        if (sceneryUpgradePlan.rockPts && sceneryUpgradePlan.rockPts.length > 0) {
+          Promise.all([load("rocks-high.glb"), load("rocks-low.glb"), load("stones.glb")]).then(([rHigh, rLow, rStones]) => {
+            const highList = [];
+            const lowList = [];
+            const stoneList = [];
+            for (let i = 0; i < sceneryUpgradePlan.rockPts.length; i++) {
+              const p = sceneryUpgradePlan.rockPts[i];
+              const tf = { x: p.x, y: p.y - 0.02, z: p.z, ry: p.rot, sx: p.sc, sy: p.sc, sz: p.sc };
+              if (i % 3 === 0 && rHigh) highList.push(tf);
+              else if (i % 3 === 1 && rLow) lowList.push(tf);
+              else if (rStones) stoneList.push(tf);
+              else if (rLow) lowList.push(tf);
+            }
+            const created = [];
+            if (rHigh && highList.length) created.push(...mgr.buildInstancedFromAsset(THREE_REF, chunkGrp, rHigh, highList, 1.25, sceneryUpgradePlan.rockCols));
+            if (rLow && lowList.length) created.push(...mgr.buildInstancedFromAsset(THREE_REF, chunkGrp, rLow, lowList, 1.18, sceneryUpgradePlan.rockCols));
+            if (rStones && stoneList.length) created.push(...mgr.buildInstancedFromAsset(THREE_REF, chunkGrp, rStones, stoneList, 0.95, sceneryUpgradePlan.rockCols));
+            if (created.length > 0) {
+              mgr.removePlaceholderMeshes(chunkGrp, sceneryUpgradePlan.rockPlaceholders);
+            }
+          });
+        }
+
+        // Extra edge pebble clusters using stones.glb
+        if (sceneryUpgradePlan.extraStonePts && sceneryUpgradePlan.extraStonePts.length > 0) {
+          load("stones.glb").then((stonesAsset) => {
+            if (!stonesAsset) return;
+            const list = sceneryUpgradePlan.extraStonePts.map((p) => ({
+              x: p.x, y: p.y - 0.01, z: p.z, ry: p.rot, sx: 0.72 * p.sc, sy: 0.72 * p.sc, sz: 0.72 * p.sc
+            }));
+            mgr.buildInstancedFromAsset(THREE_REF, chunkGrp, stonesAsset, list, 0.85, sceneryUpgradePlan.rockCols);
+          });
+        }
+
+        // 5b. Upgrade Pine/Jungle Trees -> tree-high.glb & tree.glb
+        if (sceneryUpgradePlan.treePts && sceneryUpgradePlan.treePts.length > 0) {
+          Promise.all([load("tree-high.glb"), load("tree.glb")]).then(([tHigh, tLow]) => {
+            const tallTfs = [];
+            const medTfs = [];
+            for (let i = 0; i < sceneryUpgradePlan.treePts.length; i++) {
+              const p = sceneryUpgradePlan.treePts[i];
+              const tf = { x: p.x, y: p.y - 0.02, z: p.z, ry: p.rot, sx: p.sc, sy: p.sc, sz: p.sc };
+              if (i % 5 < 3 && tHigh) tallTfs.push(tf);
+              else if (tLow) medTfs.push(tf);
+              else if (tHigh) tallTfs.push(tf);
+            }
+            const created = [];
+            if (tHigh && tallTfs.length) created.push(...mgr.buildInstancedFromAsset(THREE_REF, chunkGrp, tHigh, tallTfs, 1.48, sceneryUpgradePlan.treeTints));
+            if (tLow && medTfs.length) created.push(...mgr.buildInstancedFromAsset(THREE_REF, chunkGrp, tLow, medTfs, 1.32, sceneryUpgradePlan.treeTints));
+            if (created.length > 0) {
+              mgr.removePlaceholderMeshes(chunkGrp, sceneryUpgradePlan.treePlaceholders);
+            }
+          });
+        }
+
+        // 5c. Upgrade Shrubs / Ferns / Sky Tufts -> plant.glb
+        if (sceneryUpgradePlan.plantPts && sceneryUpgradePlan.plantPts.length > 0) {
+          load("plant.glb").then((plantAsset) => {
+            if (!plantAsset) return;
+            const tfs = sceneryUpgradePlan.plantPts.map((p) => ({
+              x: p.x, y: p.y - 0.01, z: p.z, ry: p.rot, sx: p.sc, sy: p.sc, sz: p.sc
+            }));
+            const created = mgr.buildInstancedFromAsset(THREE_REF, chunkGrp, plantAsset, tfs, 0.96, sceneryUpgradePlan.plantTints);
+            if (created.length > 0 && sceneryUpgradePlan.plantPlaceholders.length > 0) {
+              mgr.removePlaceholderMeshes(chunkGrp, sceneryUpgradePlan.plantPlaceholders);
+            }
+          });
+        }
+
+        // 5d. Expedition Outpost Camps (tent.glb, flag.glb, fence.glb) on verified safe clearings
+        if (sceneryUpgradePlan.campSpot) {
+          const cs = sceneryUpgradePlan.campSpot;
+          const manifest = mgr.BIOME_ASSET_MANIFEST[biome.id] || [];
+          const hasFlag = manifest.indexOf(FOR + "flag.glb") !== -1;
+          const hasFence = manifest.indexOf(FOR + "fence.glb") !== -1;
+          Promise.all([
+            load("tent.glb"),
+            hasFlag ? load("flag.glb") : Promise.resolve(null),
+            hasFence ? load("fence.glb") : Promise.resolve(null)
+          ]).then(([tentAsset, flagAsset, fenceAsset]) => {
+            if (!tentAsset) return;
+            const campGrp = new THREE_REF.Group();
+            campGrp.position.set(cs.x, cs.y, cs.z);
+            campGrp.rotation.y = cs.ry;
+
+            const tentMesh = mgr.cloneFitted(THREE_REF, tentAsset, { footprint: 1.8, maxH: 1.45, x: 0, z: 0 });
+            if (tentMesh) campGrp.add(tentMesh);
+            if (flagAsset) {
+              const flagMesh = mgr.cloneFitted(THREE_REF, flagAsset, { footprint: 0.55, maxH: 1.25, x: 1.08, z: 0.48, ry: 0.25 });
+              if (flagMesh) campGrp.add(flagMesh);
+            }
+            if (fenceAsset) {
+              const fL = mgr.cloneFitted(THREE_REF, fenceAsset, { footprint: 1.15, maxH: 0.55, x: -1.12, z: -0.58, ry: Math.PI * 0.35 });
+              const fR = mgr.cloneFitted(THREE_REF, fenceAsset, { footprint: 1.15, maxH: 0.55, x: 1.12, z: -0.58, ry: -Math.PI * 0.35 });
+              if (fL) campGrp.add(fL);
+              if (fR) campGrp.add(fR);
+            }
+            chunkGrp.add(campGrp);
+          });
+        } else if (sceneryUpgradePlan.fenceSpot) {
+          const fs = sceneryUpgradePlan.fenceSpot;
+          load("fence.glb").then((fenceAsset) => {
+            if (!fenceAsset) return;
+            const fGrp = new THREE_REF.Group();
+            fGrp.position.set(fs.x, fs.y, fs.z);
+            fGrp.rotation.y = fs.ry;
+            const f1 = mgr.cloneFitted(THREE_REF, fenceAsset, { footprint: 1.3, maxH: 0.6, x: -0.65, z: 0 });
+            const f2 = mgr.cloneFitted(THREE_REF, fenceAsset, { footprint: 1.3, maxH: 0.6, x: 0.65, z: 0 });
+            if (f1) fGrp.add(f1);
+            if (f2) fGrp.add(f2);
+            chunkGrp.add(fGrp);
+          });
+        }
+      });
     }
   }
 
