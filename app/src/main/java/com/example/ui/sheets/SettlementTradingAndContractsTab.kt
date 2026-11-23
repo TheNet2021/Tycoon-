@@ -44,6 +44,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.data.SettlementConstructionContract
 import com.example.data.SettlementContractCategory
+import com.example.data.SettlementFacilityType
 import com.example.data.SettlementTransaction
 import com.example.data.SurvivorTradeOffer
 import com.example.data.TradeCatalog
@@ -531,6 +532,14 @@ private fun SettlementContractCard(
                 }
                 if (contract.passiveWaterBonus > 0) {
                     FrontierBadgeChip(text = "+${contract.passiveWaterBonus} Water/d", accent = CrystalCyan)
+                }
+                val targetFacility = contract.targetFacilityId?.let { SettlementFacilityType.fromId(it) }
+                if (targetFacility != null) {
+                    val curLvl = state.settlement.facilityLevel(targetFacility)
+                    val label = if (curLvl == 0) "+Builds ${targetFacility.title}"
+                    else if (curLvl < targetFacility.maxLevel) "+${targetFacility.title} Lv.${curLvl + 1}"
+                    else "+8 Supplies"
+                    FrontierBadgeChip(text = label, accent = Color(targetFacility.accentHex))
                 }
             }
         }

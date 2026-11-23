@@ -68,9 +68,21 @@ object SettlementSerializer {
             obj.put("startedEpochMs", h.startedEpochMs)
             obj.put("completesEpochMs", h.completesEpochMs)
             obj.put("isCompleted", h.isCompleted)
+            obj.put("upgradeLevel", h.upgradeLevel)
+            obj.put("hexModel", h.hexModelName)
             houseArr.put(obj)
         }
         root.put("housingUnits", houseArr)
+
+        val facArr = JSONArray()
+        state.facilities.forEach { f ->
+            val obj = JSONObject()
+            obj.put("typeId", f.type.id)
+            obj.put("level", f.level)
+            obj.put("hexModel", f.type.hexModelName)
+            facArr.put(obj)
+        }
+        root.put("facilities", facArr)
 
         val offerArr = JSONArray()
         state.survivorOffersForSale.forEach { o ->
@@ -102,6 +114,7 @@ object SettlementSerializer {
             obj.put("waterCapBonus", c.waterCapBonus)
             obj.put("passiveFoodBonus", c.passiveFoodBonus)
             obj.put("passiveWaterBonus", c.passiveWaterBonus)
+            if (c.targetFacilityId != null) obj.put("targetFacilityId", c.targetFacilityId)
             contractArr.put(obj)
         }
         root.put("openContracts", contractArr)
@@ -186,7 +199,22 @@ object SettlementSerializer {
                             type = type,
                             startedEpochMs = o.optLong("startedEpochMs", 0L),
                             completesEpochMs = o.optLong("completesEpochMs", 0L),
-                            isCompleted = o.optBoolean("isCompleted", true)
+                            isCompleted = o.optBoolean("isCompleted", true),
+                            upgradeLevel = o.optInt("upgradeLevel", 1).coerceIn(1, HousingBuilding.MAX_HOUSING_LEVEL)
+                        )
+                    )
+                }
+            }
+
+            val facilities = buildList {
+                val arr = obj.optJSONArray("facilities") ?: return@buildList
+                for (i in 0 until arr.length()) {
+                    val o = arr.optJSONObject(i) ?: continue
+                    val type = SettlementFacilityType.fromId(o.optString("typeId")) ?: continue
+                    add(
+                        SettlementFacilityBuilding(
+                            type = type,
+                            level = o.optInt("level", 1).coerceIn(1, type.maxLevel)
                         )
                     )
                 }
@@ -241,7 +269,8 @@ object SettlementSerializer {
                             foodCapBonus = o.optInt("foodCapBonus", 0),
                             waterCapBonus = o.optInt("waterCapBonus", 0),
                             passiveFoodBonus = o.optInt("passiveFoodBonus", 0),
-                            passiveWaterBonus = o.optInt("passiveWaterBonus", 0)
+                            passiveWaterBonus = o.optInt("passiveWaterBonus", 0),
+                            targetFacilityId = o.optString("targetFacilityId", "").takeIf { it.isNotBlank() }
                         )
                     )
                 }
@@ -282,6 +311,7 @@ object SettlementSerializer {
                 survivors = survivors,
                 pendingArrivals = arrivals,
                 housingUnits = housing,
+                facilities = facilities,
                 foodStock = obj.optInt("foodStock", 20).coerceAtLeast(0),
                 waterStock = obj.optInt("waterStock", 20).coerceAtLeast(0),
                 suppliesStock = obj.optInt("suppliesStock", 15).coerceAtLeast(0),

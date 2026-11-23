@@ -54,9 +54,11 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.data.BiomeType
 import com.example.data.HousingBuilding
 import com.example.data.HousingType
 import com.example.data.RefugeeArrival
+import com.example.data.SettlementFacilityType
 import com.example.data.SettlementState
 import com.example.data.SettlementStats
 import com.example.data.SupplyRestockKind
@@ -95,6 +97,8 @@ fun SettlementSheet(
     state: TycoonSaveState,
     onDismiss: () -> Unit,
     onStartHousing: (HousingType) -> Boolean,
+    onUpgradeHousing: (String) -> Boolean,
+    onBuildOrUpgradeFacility: (SettlementFacilityType) -> Boolean,
     onDemolishHousing: (String) -> Boolean,
     onAdmitRefugee: (String) -> Boolean,
     onDismissRefugee: (String) -> Unit,
@@ -103,7 +107,8 @@ fun SettlementSheet(
     onBuySupplies: (SupplyRestockKind, Int) -> Boolean,
     onSellToSurvivors: (String, Int) -> Boolean,
     onBuyFromSurvivors: (String, Int) -> Boolean,
-    onCompleteContract: (String) -> Boolean
+    onCompleteContract: (String) -> Boolean,
+    onVisitSettlement3D: () -> Unit
 ) {
     val settlement = state.settlement
     val stats = remember(settlement) { settlement.computeStats() }
@@ -148,7 +153,8 @@ fun SettlementSheet(
                 onDismissRefugee = onDismissRefugee,
                 onScoutArrival = onScoutArrival,
                 onBuySupplies = onBuySupplies,
-                onGoToHousing = { selectedTab = 2 }
+                onGoToHousing = { selectedTab = 2 },
+                onVisitSettlement3D = onVisitSettlement3D
             )
             1 -> SettlementSurvivorsTab(
                 settlement = settlement,
@@ -160,6 +166,8 @@ fun SettlementSheet(
                 stats = stats,
                 nowMs = nowMs,
                 onBuildHousing = onStartHousing,
+                onUpgradeHousing = onUpgradeHousing,
+                onBuildOrUpgradeFacility = onBuildOrUpgradeFacility,
                 onDemolishHousing = onDemolishHousing
             )
             3 -> SettlementTradingTab(
@@ -183,7 +191,8 @@ private fun SettlementOverviewTab(
     onDismissRefugee: (String) -> Unit,
     onScoutArrival: () -> Boolean,
     onBuySupplies: (SupplyRestockKind, Int) -> Boolean,
-    onGoToHousing: () -> Unit
+    onGoToHousing: () -> Unit,
+    onVisitSettlement3D: () -> Unit
 ) {
     val settlement = state.settlement
     val netDayCoin = stats.estimatedDailyTradeAndLogistics - stats.totalDailyMaintenanceCost
@@ -222,6 +231,46 @@ private fun SettlementOverviewTab(
                     accent = netColor,
                     modifier = Modifier.weight(1f)
                 )
+            }
+        }
+
+        // 3D Hexagon District Showcase Banner
+        item {
+            val canVisitHex = state.isBiomeUnlocked(BiomeType.MOUNTAINS)
+            FrontierGlassCard(accentBorder = if (canVisitHex) EmeraldCanopy else AmberGold) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Hexagon District (${settlement.facilities.size}/6 Civic Buildings)",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = CreamText,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = if (canVisitHex) {
+                                "West of Rocky Mountains • Built homes & civic buildings appear live in 3D."
+                            } else {
+                                "Unlock Rocky Mountains (Map 2) to walk into your 3D Hexagon Sanctuary."
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = LichenMuted
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    FrontierActionButton(
+                        text = if (canVisitHex) "Visit 3D" else "Locked",
+                        enabled = canVisitHex,
+                        accentColor = EmeraldCanopy,
+                        testTag = "btn_visit_hex_settlement",
+                        onClick = onVisitSettlement3D
+                    )
+                }
             }
         }
 
@@ -684,6 +733,8 @@ private fun SettlementHousingTab(
     stats: SettlementStats,
     nowMs: Long,
     onBuildHousing: (HousingType) -> Boolean,
+    onUpgradeHousing: (String) -> Boolean,
+    onBuildOrUpgradeFacility: (SettlementFacilityType) -> Boolean,
     onDemolishHousing: (String) -> Boolean
 ) {
     val settlement = state.settlement
@@ -692,6 +743,23 @@ private fun SettlementHousingTab(
         verticalArrangement = Arrangement.spacedBy(10.dp),
         contentPadding = PaddingValues(bottom = 20.dp)
     ) {
+        item {
+            FrontierSectionHeader(
+                title = "Civic & Production Buildings (Hexagon Kit)",
+                trailingBadge = "${settlement.facilities.size}/6 Active",
+                accent = EmeraldCanopy
+            )
+        }
+
+        items(SettlementFacilityType.entries, key = { "fac_${it.id}" }) { facility ->
+            SettlementFacilityCard(
+                type = facility,
+                currentLevel = settlement.facilityLevel(facility),
+                state = state,
+                onAction = { onBuildOrUpgradeFacility(facility) }
+            )
+        }
+
         item {
             FrontierSectionHeader(
                 title = "Construct Housing (${stats.population}/${stats.totalHousingCapacity} Beds)",
@@ -710,7 +778,7 @@ private fun SettlementHousingTab(
 
         item {
             FrontierSectionHeader(
-                title = "Settlement Buildings (${settlement.housingUnits.size})",
+                title = "Built Homes & Upgrades (${settlement.housingUnits.size})",
                 trailingBadge = "Upkeep $${stats.dailyHousingMaintenance}/d",
                 accent = CrystalCyan
             )
@@ -729,11 +797,88 @@ private fun SettlementHousingTab(
             items(settlement.housingUnits, key = { it.id }) { building ->
                 BuiltHousingCard(
                     building = building,
+                    state = state,
                     occupants = settlement.occupantsIn(building.id),
-                    canDemolish = (stats.totalHousingCapacity - (if (building.isCompleted) building.type.capacity else 0)) >= stats.population,
+                    canDemolish = (stats.totalHousingCapacity - (if (building.isCompleted) building.effectiveCapacity() else 0)) >= stats.population,
                     nowMs = nowMs,
+                    onUpgrade = { onUpgradeHousing(building.id) },
                     onDemolish = { onDemolishHousing(building.id) }
                 )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SettlementFacilityCard(
+    type: SettlementFacilityType,
+    currentLevel: Int,
+    state: TycoonSaveState,
+    onAction: () -> Unit
+) {
+    val accent = Color(type.accentHex)
+    val isMaxed = currentLevel >= type.maxLevel
+    val targetLevel = (currentLevel + 1).coerceAtMost(type.maxLevel)
+    val coinCost = type.coinCostForLevel(targetLevel)
+    val matCosts = type.materialCostsForLevel(targetLevel)
+    val canAfford = !isMaxed && state.coins >= coinCost &&
+        matCosts.all { (matId, req) -> state.availableForTrade(matId) >= req }
+
+    FrontierGlassCard(accentBorder = if (currentLevel > 0) accent else PanelBorder) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = type.title,
+                            style = MaterialTheme.typography.titleSmall,
+                            color = CreamText,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        FrontierBadgeChip(
+                            text = if (currentLevel == 0) "Unbuilt" else "Lv.$currentLevel/${type.maxLevel}",
+                            accent = if (currentLevel > 0) EmeraldCanopy else LichenMuted
+                        )
+                    }
+                    Text(
+                        text = type.description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = LichenMuted
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                FrontierActionButton(
+                    text = when {
+                        isMaxed -> "Max"
+                        currentLevel == 0 -> formatCompactCurrency(coinCost)
+                        else -> "Up ${formatCompactCurrency(coinCost)}"
+                    },
+                    enabled = canAfford,
+                    accentColor = accent,
+                    testTag = "btn_facility_${type.id}",
+                    onClick = onAction
+                )
+            }
+            if (!isMaxed) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    matCosts.forEach { (matId, req) ->
+                        val have = state.availableForTrade(matId)
+                        val matName = TradeCatalog.find(matId)?.displayName ?: matId
+                        FrontierBadgeChip(
+                            text = "$matName $have/$req",
+                            accent = if (have >= req) EmeraldCanopy else CoralCrimson
+                        )
+                    }
+                }
             }
         }
     }
@@ -809,17 +954,26 @@ private fun HousingBlueprintCard(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun BuiltHousingCard(
     building: HousingBuilding,
+    state: TycoonSaveState,
     occupants: Int,
     canDemolish: Boolean,
     nowMs: Long,
+    onUpgrade: () -> Unit,
     onDemolish: () -> Unit
 ) {
     val accent = Color(building.type.accentHex)
     val progress = building.progressFraction(nowMs)
     val remaining = building.remainingSeconds(nowMs)
+    val cap = building.effectiveCapacity()
+    val canUpgrade = building.canUpgrade()
+    val upgradeCoinCost = building.nextUpgradeCoinCost()
+    val upgradeMatCosts = building.nextUpgradeMaterialCosts()
+    val hasUpgradeRes = canUpgrade && state.coins >= upgradeCoinCost &&
+        upgradeMatCosts.all { (matId, req) -> state.availableForTrade(matId) >= req }
 
     Surface(
         shape = RoundedCornerShape(16.dp),
@@ -834,37 +988,75 @@ private fun BuiltHousingCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = building.type.title,
-                        style = MaterialTheme.typography.titleSmall,
-                        color = CreamText,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = building.type.title,
+                            style = MaterialTheme.typography.titleSmall,
+                            color = CreamText,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        FrontierBadgeChip(
+                            text = "Tier ${building.upgradeLevel}/${HousingBuilding.MAX_HOUSING_LEVEL}",
+                            accent = accent
+                        )
+                    }
                     Text(
                         text = if (building.isCompleted) {
-                            "Residents: $occupants/${building.type.capacity} • Upkeep $${building.type.dailyMaintenanceCost}/d"
+                            "Residents: $occupants/$cap • Upkeep $${building.effectiveMaintenanceCost()}/d"
                         } else {
-                            "Under construction: ${remaining}s left (+${building.type.capacity} beds)"
+                            "Under construction: ${remaining}s left (+$cap beds)"
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = if (building.isCompleted) LichenMuted else AmberBright
                     )
                 }
-                IconButton(
-                    onClick = onDemolish,
-                    enabled = canDemolish,
-                    modifier = Modifier
-                        .size(40.dp)
-                        .minimumInteractiveComponentSize()
-                        .testTag("btn_demolish_${building.id}")
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Filled.Delete,
-                        contentDescription = "Demolish ${building.type.title}",
-                        tint = if (canDemolish) CoralCrimson else LichenMuted.copy(alpha = 0.35f)
-                    )
+                    if (canUpgrade) {
+                        FrontierActionButton(
+                            text = "Up ${formatCompactCurrency(upgradeCoinCost)}",
+                            enabled = hasUpgradeRes,
+                            accentColor = EmeraldCanopy,
+                            testTag = "btn_upgrade_housing_${building.id}",
+                            onClick = onUpgrade
+                        )
+                    } else if (building.isCompleted) {
+                        FrontierBadgeChip(text = "Max", accent = AmberGold)
+                    }
+                    IconButton(
+                        onClick = onDemolish,
+                        enabled = canDemolish,
+                        modifier = Modifier
+                            .size(40.dp)
+                            .minimumInteractiveComponentSize()
+                            .testTag("btn_demolish_${building.id}")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Delete,
+                            contentDescription = "Demolish ${building.type.title}",
+                            tint = if (canDemolish) CoralCrimson else LichenMuted.copy(alpha = 0.35f)
+                        )
+                    }
+                }
+            }
+            if (canUpgrade) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    upgradeMatCosts.forEach { (matId, req) ->
+                        val have = state.availableForTrade(matId)
+                        val matName = TradeCatalog.find(matId)?.displayName ?: matId
+                        FrontierBadgeChip(
+                            text = "$matName $have/$req",
+                            accent = if (have >= req) EmeraldCanopy else CoralCrimson
+                        )
+                    }
                 }
             }
             if (!building.isCompleted) {

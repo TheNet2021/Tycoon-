@@ -132,6 +132,142 @@ object SettlementEngine {
         )
     }
 
+    fun upgradeHousing(
+        state: TycoonSaveState,
+        housingId: String,
+        nowMs: Long
+    ): SettlementActionOutcome {
+        val settlement = state.settlement
+        val existing = settlement.housingUnits.firstOrNull { it.id == housingId }
+            ?: return SettlementActionOutcome.Failure("Housing building not found.")
+        if (!existing.isCompleted) {
+            return SettlementActionOutcome.Failure("Finish construction before upgrading.")
+        }
+        if (!existing.canUpgrade()) {
+            return SettlementActionOutcome.Failure("${existing.type.title} is already at max Tier ${HousingBuilding.MAX_HOUSING_LEVEL}.")
+        }
+        val coinCost = existing.nextUpgradeCoinCost()
+        if (state.coins < coinCost) {
+            return SettlementActionOutcome.Failure("Need $coinCost coins to upgrade ${existing.type.title}.")
+        }
+        val matCosts = existing.nextUpgradeMaterialCosts()
+        for ((matId, reqQty) in matCosts) {
+            val have = state.availableForTrade(matId)
+            if (have < reqQty) {
+                val name = TradeCatalog.find(matId)?.displayName ?: matId
+                return SettlementActionOutcome.Failure("Need $reqQty $name (have $have).")
+            }
+        }
+
+        var nextStock = state.warehouseStock
+        var nextBag = state.inventory
+        for ((matId, reqQty) in matCosts) {
+            val res = deductFromStockAndBag(nextStock, nextBag, matId, reqQty)
+            nextStock = res.first
+            nextBag = res.second
+        }
+
+        val nextLevel = existing.upgradeLevel + 1
+        val nextUnits = settlement.housingUnits.map { h ->
+            if (h.id == housingId) h.copy(upgradeLevel = nextLevel) else h
+        }
+        val seq = settlement.nextSequenceId
+        val tx = SettlementTransaction(
+            id = "tx_$seq",
+            type = SettlementTransactionType.CONTRACT_PAYOUT,
+            description = "Upgraded ${existing.type.title} to Tier $nextLevel",
+            coinDelta = -coinCost,
+            timestampEpochMs = nowMs
+        )
+        val preNeeds = settlement.copy(
+            housingUnits = nextUnits,
+            nextSequenceId = seq + 1,
+            transactionHistory = prependTx(settlement.transactionHistory, tx)
+        )
+        val finalSettlement = preNeeds.copy(
+            survivors = refreshNeedsAndHappiness(preNeeds, paidFull = true)
+        )
+        val upgradedBuilding = nextUnits.first { it.id == housingId }
+        return SettlementActionOutcome.Success(
+            updatedState = state.copy(
+                coins = state.coins - coinCost,
+                warehouseStock = nextStock,
+                inventory = nextBag,
+                settlement = finalSettlement
+            ),
+            bannerMessage = "${existing.type.title} upgraded to Tier $nextLevel (${upgradedBuilding.effectiveCapacity()} beds)!"
+        )
+    }
+
+    fun buildOrUpgradeFacility(
+        state: TycoonSaveState,
+        facilityType: SettlementFacilityType,
+        nowMs: Long
+    ): SettlementActionOutcome {
+        val settlement = state.settlement
+        val currentLevel = settlement.facilityLevel(facilityType)
+        if (currentLevel >= facilityType.maxLevel) {
+            return SettlementActionOutcome.Failure("${facilityType.title} is already at max Tier ${facilityType.maxLevel}.")
+        }
+        val targetLevel = currentLevel + 1
+        val coinCost = facilityType.coinCostForLevel(targetLevel)
+        if (state.coins < coinCost) {
+            return SettlementActionOutcome.Failure("Need $coinCost coins to build ${facilityType.title} Tier $targetLevel.")
+        }
+        val matCosts = facilityType.materialCostsForLevel(targetLevel)
+        for ((matId, reqQty) in matCosts) {
+            val have = state.availableForTrade(matId)
+            if (have < reqQty) {
+                val name = TradeCatalog.find(matId)?.displayName ?: matId
+                return SettlementActionOutcome.Failure("Need $reqQty $name (have $have).")
+            }
+        }
+
+        var nextStock = state.warehouseStock
+        var nextBag = state.inventory
+        for ((matId, reqQty) in matCosts) {
+            val res = deductFromStockAndBag(nextStock, nextBag, matId, reqQty)
+            nextStock = res.first
+            nextBag = res.second
+        }
+
+        val updatedFacilities = if (currentLevel == 0) {
+            settlement.facilities + SettlementFacilityBuilding(facilityType, 1)
+        } else {
+            settlement.facilities.map { f ->
+                if (f.type == facilityType) f.copy(level = targetLevel) else f
+            }
+        }
+        val seq = settlement.nextSequenceId
+        val actionVerb = if (currentLevel == 0) "Built" else "Upgraded"
+        val tx = SettlementTransaction(
+            id = "tx_$seq",
+            type = SettlementTransactionType.CONTRACT_PAYOUT,
+            description = "$actionVerb ${facilityType.title} Tier $targetLevel",
+            coinDelta = -coinCost,
+            timestampEpochMs = nowMs
+        )
+        val preNeeds = settlement.copy(
+            facilities = updatedFacilities,
+            reputation = settlement.reputation + 8 * targetLevel,
+            nextSequenceId = seq + 1,
+            transactionHistory = prependTx(settlement.transactionHistory, tx)
+        )
+        val finalSettlement = preNeeds.copy(
+            survivors = refreshNeedsAndHappiness(preNeeds, paidFull = true)
+        )
+        return SettlementActionOutcome.Success(
+            updatedState = state.copy(
+                coins = state.coins - coinCost,
+                xp = state.xp + 30L * targetLevel,
+                warehouseStock = nextStock,
+                inventory = nextBag,
+                settlement = finalSettlement
+            ),
+            bannerMessage = "$actionVerb ${facilityType.title} Tier $targetLevel!"
+        )
+    }
+
     fun demolishHousing(
         state: TycoonSaveState,
         housingId: String
@@ -140,7 +276,7 @@ object SettlementEngine {
         val target = settlement.housingUnits.firstOrNull { it.id == housingId }
             ?: return SettlementActionOutcome.Failure("Housing building not found.")
         val remainingUnits = settlement.housingUnits.filterNot { it.id == housingId }
-        val remainingCap = remainingUnits.filter { it.isCompleted }.sumOf { it.type.capacity }
+        val remainingCap = remainingUnits.filter { it.isCompleted }.sumOf { it.effectiveCapacity() }
         if (remainingCap < settlement.survivors.size) {
             return SettlementActionOutcome.Failure(
                 "Cannot demolish: ${settlement.survivors.size} residents need at least $remainingCap beds."
@@ -172,7 +308,7 @@ object SettlementEngine {
         }
 
         val openHouse = settlement.housingUnits.firstOrNull { h ->
-            h.isCompleted && settlement.occupantsIn(h.id) < h.type.capacity
+            h.isCompleted && settlement.occupantsIn(h.id) < h.effectiveCapacity()
         } ?: return SettlementActionOutcome.Failure("No completed housing beds available.")
 
         val needs = computeNeedsForNewResident(settlement)
@@ -467,9 +603,27 @@ object SettlementEngine {
             timestampEpochMs = nowMs
         )
 
+        val targetFacility = contract.targetFacilityId?.let { SettlementFacilityType.fromId(it) }
+        var nextFacilities = settlement.facilities
+        var contractSuppliesBonus = 0
+        if (targetFacility != null) {
+            val curLvl = settlement.facilityLevel(targetFacility)
+            if (curLvl == 0) {
+                nextFacilities = nextFacilities + SettlementFacilityBuilding(targetFacility, 1)
+            } else if (curLvl < targetFacility.maxLevel) {
+                nextFacilities = nextFacilities.map { f ->
+                    if (f.type == targetFacility) f.copy(level = curLvl + 1) else f
+                }
+            } else {
+                contractSuppliesBonus = 8
+            }
+        }
+
         val remainingContracts = settlement.openContracts.filterNot { it.id == contractId }
         val nextCompletedCount = settlement.completedContractsCount + 1
         var updatedSettlement = settlement.copy(
+            facilities = nextFacilities,
+            suppliesStock = (settlement.suppliesStock + contractSuppliesBonus).coerceAtMost(settlement.suppliesCapacity),
             reputation = settlement.reputation + contract.rewardReputation,
             completedContractsCount = nextCompletedCount,
             communityHappinessBonus = (settlement.communityHappinessBonus + contract.happinessBonus).coerceAtMost(30),
@@ -581,10 +735,20 @@ object SettlementEngine {
         var nextLifetime = state.lifetimeEarned
         var seq = s.nextSequenceId
 
-        // Farmers produce Food, Water & small Timber harvest
+        val farmLvl = s.facilityLevel(SettlementFacilityType.FARM)
+        val millLvl = s.facilityLevel(SettlementFacilityType.MILL)
+        val watermillLvl = s.facilityLevel(SettlementFacilityType.WATERMILL)
+        val marketLvl = s.facilityLevel(SettlementFacilityType.MARKET)
+        val mineLvl = s.facilityLevel(SettlementFacilityType.SETTLEMENT_MINE)
+        val smelterLvl = s.facilityLevel(SettlementFacilityType.SETTLEMENT_SMELTER)
+
+        // Farmers + Farm/Mill/Watermill produce Food, Water & small Timber harvest
         val farmers = s.survivors.filter { it.assignedJob == SurvivorProfession.FARMER }
-        val foodGained = farmers.sumOf { (2.6 * it.effectiveEfficiencyMultiplier()).roundToInt() } + s.bonusDailyFoodProd
-        val waterGained = farmers.sumOf { (2.4 * it.effectiveEfficiencyMultiplier()).roundToInt() } + s.bonusDailyWaterProd
+        val farmMult = 1.0 + farmLvl * 0.15
+        val foodGained = farmers.sumOf { (2.6 * it.effectiveEfficiencyMultiplier() * farmMult).roundToInt() } +
+            s.bonusDailyFoodProd + farmLvl * 5 + millLvl * 3
+        val waterGained = farmers.sumOf { (2.4 * it.effectiveEfficiencyMultiplier()).roundToInt() } +
+            s.bonusDailyWaterProd + watermillLvl * 5
         val timberBonus = farmers.sumOf { (0.6 * it.effectiveEfficiencyMultiplier()).toInt() }
         if (timberBonus > 0 && stockUsed < stockCap) {
             val add = minOf(timberBonus, stockCap - stockUsed)
@@ -592,11 +756,11 @@ object SettlementEngine {
             stockUsed += add
         }
 
-        // Miners extract ores based on unlocked biomes
+        // Miners + Quarry Mine extract ores based on unlocked biomes
         val minerPool = unlockedMinerResourcePool(state.unlockedBiomes)
         val miners = s.survivors.filter { it.assignedJob == SurvivorProfession.MINER }
         miners.forEachIndexed { idx, miner ->
-            val yieldUnits = (1.5 * miner.effectiveEfficiencyMultiplier()).roundToInt().coerceAtLeast(1)
+            val yieldUnits = (1.5 * miner.effectiveEfficiencyMultiplier()).roundToInt().coerceAtLeast(1) + mineLvl * 2
             val resId = minerPool[(s.dayNumber + idx) % minerPool.size]
             if (stockUsed < stockCap) {
                 val add = minOf(yieldUnits, stockCap - stockUsed)
@@ -604,11 +768,17 @@ object SettlementEngine {
                 stockUsed += add
             }
         }
+        if (mineLvl > 0 && stockUsed < stockCap) {
+            val quarryYield = minOf(mineLvl * 2, stockCap - stockUsed)
+            val quarryRes = minerPool[s.dayNumber % minerPool.size]
+            nextStock[quarryRes] = (nextStock[quarryRes] ?: 0) + quarryYield
+            stockUsed += quarryYield
+        }
 
-        // Factory workers convert raw stock into manufactured products (only when raw input exists!)
+        // Factory workers + Settlement Smeltery convert raw stock into manufactured products (only when raw input exists!)
         val factoryWorkers = s.survivors.filter { it.assignedJob == SurvivorProfession.FACTORY_WORKER }
         factoryWorkers.forEach { worker ->
-            val maxBatches = (1.2 * worker.effectiveEfficiencyMultiplier()).roundToInt().coerceAtLeast(1)
+            val maxBatches = (1.2 * worker.effectiveEfficiencyMultiplier()).roundToInt().coerceAtLeast(1) + smelterLvl * 2
             var crafted = 0
             val recipes = listOf(
                 "wood" to "planks",
@@ -632,16 +802,17 @@ object SettlementEngine {
             }
         }
 
-        // Traders & Transport workers generate capped service revenue & recover demand saturation
+        // Traders & Transport workers + Frontier Market generate capped service revenue & recover demand saturation
         val traders = s.survivors.filter { it.assignedJob == SurvivorProfession.TRADER }
         val transporters = s.survivors.filter { it.assignedJob == SurvivorProfession.TRANSPORT_WORKER }
-        val traderEarnings = traders.sumOf { (14.0 * it.effectiveEfficiencyMultiplier()).roundToLong() }
-        val transportEarnings = transporters.sumOf { (11.0 * it.effectiveEfficiencyMultiplier()).roundToLong() }
+        val marketRevMult = 1.0 + marketLvl * 0.18
+        val traderEarnings = traders.sumOf { (14.0 * it.effectiveEfficiencyMultiplier() * marketRevMult).roundToLong() }
+        val transportEarnings = transporters.sumOf { (11.0 * it.effectiveEfficiencyMultiplier() * marketRevMult).roundToLong() }
         val totalJobRevenue = traderEarnings + transportEarnings
 
         // Operating costs: Worker salaries + Housing maintenance
         val salaries = s.survivors.sumOf { it.dailySalary() }
-        val housingMaint = s.housingUnits.filter { it.isCompleted }.sumOf { it.type.dailyMaintenanceCost }
+        val housingMaint = s.housingUnits.filter { it.isCompleted }.sumOf { it.effectiveMaintenanceCost() }
         val totalOperatingCost = salaries + housingMaint
 
         nextCoins += totalJobRevenue
@@ -740,7 +911,8 @@ object SettlementEngine {
         }.ifEmpty { TradeCatalog.allGoods.take(4) }
 
         val offers = mutableListOf<SurvivorTradeOffer>()
-        val offerCount = 4.coerceAtMost(pool.size)
+        val marketLvl = settlement.facilityLevel(SettlementFacilityType.MARKET)
+        val offerCount = (4 + marketLvl).coerceAtMost(pool.size)
         val dayPhase = (nowMs / DAY_DURATION_MS).toInt() + seed.toInt()
         for (i in 0 until offerCount) {
             val good = pool[abs(dayPhase + i * 3) % pool.size]
@@ -777,27 +949,43 @@ object SettlementEngine {
             val requester = settlement.survivors.getOrNull(abs(seq.toInt()) % settlement.survivors.size.coerceAtLeast(1))?.name
                 ?: "Settlement Council"
             val scale = 1 + (settlement.completedContractsCount / 3) + (settlement.survivors.size / 6)
+            val variant = abs(seq.toInt())
 
             val contract = when (cat) {
-                SettlementContractCategory.HOUSES -> SettlementConstructionContract(
-                    id = "sc_$seq",
-                    title = "Settler Row Cottages",
-                    description = "Build insulated bunk frames and roofing for incoming families.",
-                    category = cat,
-                    requesterName = requester,
-                    materialRequirements = mapOf("wood" to 8 * scale, "planks" to 4 * scale),
-                    rewardCoins = (140L + 75L * scale),
-                    rewardXp = 55L * scale,
-                    rewardReputation = 18 + scale * 4,
-                    happinessBonus = 2
-                )
+                SettlementContractCategory.HOUSES -> if (variant % 2 == 0) {
+                    SettlementConstructionContract(
+                        id = "sc_$seq",
+                        title = "Build Frontier Cottages",
+                        description = "Settlers request timber-framed houses to welcome arriving families.",
+                        category = cat,
+                        requesterName = requester,
+                        materialRequirements = mapOf("wood" to 8 * scale, "planks" to 4 * scale),
+                        rewardCoins = (140L + 75L * scale),
+                        rewardXp = 55L * scale,
+                        rewardReputation = 18 + scale * 4,
+                        happinessBonus = 2
+                    )
+                } else {
+                    SettlementConstructionContract(
+                        id = "sc_$seq",
+                        title = "Village Commons Quarter",
+                        description = "Residents ask for stone-chimney cottages & courtyard lanterns.",
+                        category = cat,
+                        requesterName = requester,
+                        materialRequirements = mapOf("planks" to 5 * scale, "stone" to 6 * scale, "stone_blocks" to 2 * scale),
+                        rewardCoins = (175L + 85L * scale),
+                        rewardXp = 65L * scale,
+                        rewardReputation = 20 + scale * 4,
+                        happinessBonus = 3
+                    )
+                }
                 SettlementContractCategory.SHELTERS -> SettlementConstructionContract(
                     id = "sc_$seq",
-                    title = "Stormproof Emergency Shelter",
-                    description = "Reinforce stone storm barriers and emergency supply lockers.",
+                    title = "Timber Frontier Cabins",
+                    description = "Reinforce insulated bunkhouses and stormproof timber cabins.",
                     category = cat,
                     requesterName = requester,
-                    materialRequirements = mapOf("stone" to 8 * scale, "stone_blocks" to 3 * scale),
+                    materialRequirements = mapOf("wood" to 6 * scale, "stone" to 6 * scale, "stone_blocks" to 3 * scale),
                     rewardCoins = (165L + 85L * scale),
                     rewardXp = 65L * scale,
                     rewardReputation = 22 + scale * 4,
@@ -805,46 +993,97 @@ object SettlementEngine {
                 )
                 SettlementContractCategory.STORAGE_BUILDINGS -> SettlementConstructionContract(
                     id = "sc_$seq",
-                    title = "Granary & Water Cistern",
-                    description = "Expand cold food storage and rainwater cistern capacity.",
+                    title = "Construct Grain Windmill",
+                    description = "Residents request a Windmill to expand Food & Supply reserves.",
                     category = cat,
                     requesterName = requester,
-                    materialRequirements = mapOf("planks" to 5 * scale, "stone_blocks" to 4 * scale),
+                    materialRequirements = mapOf("wood" to 6 * scale, "planks" to 5 * scale, "stone_blocks" to 4 * scale),
                     rewardCoins = (190L + 95L * scale),
                     rewardXp = 75L * scale,
                     rewardReputation = 24 + scale * 5,
                     foodCapBonus = 25,
-                    waterCapBonus = 25
+                    waterCapBonus = 20,
+                    targetFacilityId = SettlementFacilityType.MILL.id
                 )
-                SettlementContractCategory.COMMUNITY_FACILITIES -> SettlementConstructionContract(
-                    id = "sc_$seq",
-                    title = "Community Well & Clinic",
-                    description = "Provide steady clean water filtration and settler healthcare.",
-                    category = cat,
-                    requesterName = requester,
-                    materialRequirements = buildMap {
-                        put("stone_blocks", 5 * scale)
-                        put("wood_craft", 3 * scale)
-                        if (state.unlockedBiomes.contains("mountains")) put("metal_bars", 2 * scale)
-                    },
-                    rewardCoins = (230L + 115L * scale),
-                    rewardXp = 95L * scale,
-                    rewardReputation = 30 + scale * 6,
-                    happinessBonus = 4,
-                    passiveWaterBonus = 4
-                )
-                SettlementContractCategory.PRODUCTION_BUILDINGS -> SettlementConstructionContract(
-                    id = "sc_$seq",
-                    title = "Co-op Greenhouse Shed",
-                    description = "Construct timber & stone hydroponic beds for daily rations.",
-                    category = cat,
-                    requesterName = requester,
-                    materialRequirements = mapOf("wood" to 10 * scale, "planks" to 6 * scale, "stone" to 6 * scale),
-                    rewardCoins = (210L + 100L * scale),
-                    rewardXp = 85L * scale,
-                    rewardReputation = 26 + scale * 5,
-                    passiveFoodBonus = 4
-                )
+                SettlementContractCategory.COMMUNITY_FACILITIES -> if (variant % 2 == 0) {
+                    SettlementConstructionContract(
+                        id = "sc_$seq",
+                        title = "Frontier Market Stalls",
+                        description = "Merchants & settlers request a covered Market plaza for trading.",
+                        category = cat,
+                        requesterName = requester,
+                        materialRequirements = buildMap {
+                            put("planks", 5 * scale)
+                            put("wood_craft", 3 * scale)
+                            put("stone_blocks", 4 * scale)
+                        },
+                        rewardCoins = (230L + 115L * scale),
+                        rewardXp = 95L * scale,
+                        rewardReputation = 30 + scale * 6,
+                        happinessBonus = 4,
+                        targetFacilityId = SettlementFacilityType.MARKET.id
+                    )
+                } else {
+                    SettlementConstructionContract(
+                        id = "sc_$seq",
+                        title = "River Watermill Station",
+                        description = "Settlers request a riverside Watermill for steady fresh water.",
+                        category = cat,
+                        requesterName = requester,
+                        materialRequirements = buildMap {
+                            put("stone_blocks", 5 * scale)
+                            put("planks", 4 * scale)
+                            if (state.unlockedBiomes.contains("mountains")) put("metal_bars", 2 * scale)
+                        },
+                        rewardCoins = (240L + 115L * scale),
+                        rewardXp = 95L * scale,
+                        rewardReputation = 30 + scale * 6,
+                        happinessBonus = 3,
+                        passiveWaterBonus = 4,
+                        targetFacilityId = SettlementFacilityType.WATERMILL.id
+                    )
+                }
+                SettlementContractCategory.PRODUCTION_BUILDINGS -> when (variant % 3) {
+                    0 -> SettlementConstructionContract(
+                        id = "sc_$seq",
+                        title = "Hexagon Farmstead",
+                        description = "Farmers request irrigated plots & barns for daily food.",
+                        category = cat,
+                        requesterName = requester,
+                        materialRequirements = mapOf("wood" to 8 * scale, "planks" to 5 * scale, "stone" to 5 * scale),
+                        rewardCoins = (210L + 100L * scale),
+                        rewardXp = 85L * scale,
+                        rewardReputation = 26 + scale * 5,
+                        passiveFoodBonus = 4,
+                        targetFacilityId = SettlementFacilityType.FARM.id
+                    )
+                    1 -> SettlementConstructionContract(
+                        id = "sc_$seq",
+                        title = "Settlement Quarry Mine",
+                        description = "Miners request timber-shored quarry shafts for stone & ore.",
+                        category = cat,
+                        requesterName = requester,
+                        materialRequirements = mapOf("wood" to 8 * scale, "stone" to 8 * scale, "stone_blocks" to 4 * scale),
+                        rewardCoins = (230L + 110L * scale),
+                        rewardXp = 90L * scale,
+                        rewardReputation = 28 + scale * 5,
+                        happinessBonus = 2,
+                        targetFacilityId = SettlementFacilityType.SETTLEMENT_MINE.id
+                    )
+                    else -> SettlementConstructionContract(
+                        id = "sc_$seq",
+                        title = "Settlement Smeltery Forge",
+                        description = "Artisans request a brick smeltery to refine metal bars & planks.",
+                        category = cat,
+                        requesterName = requester,
+                        materialRequirements = mapOf("stone_blocks" to 6 * scale, "stone" to 6 * scale, "planks" to 4 * scale),
+                        rewardCoins = (250L + 120L * scale),
+                        rewardXp = 100L * scale,
+                        rewardReputation = 32 + scale * 5,
+                        happinessBonus = 2,
+                        targetFacilityId = SettlementFacilityType.SETTLEMENT_SMELTER.id
+                    )
+                }
             }
             out += contract
             seq++
@@ -918,11 +1157,11 @@ object SettlementEngine {
         val occupancy = mutableMapOf<String, Int>()
         return survivors.map { s ->
             val currentHouse = completed.firstOrNull { it.id == s.housingUnitId }
-            val assignedId = if (currentHouse != null && (occupancy[currentHouse.id] ?: 0) < currentHouse.type.capacity) {
+            val assignedId = if (currentHouse != null && (occupancy[currentHouse.id] ?: 0) < currentHouse.effectiveCapacity()) {
                 occupancy[currentHouse.id] = (occupancy[currentHouse.id] ?: 0) + 1
                 currentHouse.id
             } else {
-                val fallback = completed.firstOrNull { (occupancy[it.id] ?: 0) < it.type.capacity }
+                val fallback = completed.firstOrNull { (occupancy[it.id] ?: 0) < it.effectiveCapacity() }
                 if (fallback != null) {
                     occupancy[fallback.id] = (occupancy[fallback.id] ?: 0) + 1
                     fallback.id

@@ -11,6 +11,7 @@
 
   const IND = "models/kenney-city-kit-industrial/";
   const FOR = "models/kenney-mini-forest/";
+  const HEX = "models/kenney-hexagon-kit/";
 
   // Strictly curated per-biome model manifests (zero Map 1 assets, zero excluded archer/weapon/target assets)
   const BIOME_ASSET_MANIFEST = {
@@ -22,7 +23,22 @@
       IND + "shipping-container-a.glb",
       FOR + "tree-high.glb", FOR + "tree.glb", FOR + "plant.glb",
       FOR + "rocks-high.glb", FOR + "rocks-low.glb", FOR + "stones.glb",
-      FOR + "tent.glb", FOR + "fence.glb", FOR + "flag.glb"
+      FOR + "tent.glb", FOR + "fence.glb", FOR + "flag.glb",
+      // Hexagon Settlement Sanctuary (coherent district West of Mountains)
+      HEX + "building-cabin.glb", HEX + "building-house.glb", HEX + "building-village.glb",
+      HEX + "building-farm.glb", HEX + "building-market.glb", HEX + "building-mine.glb",
+      HEX + "building-smelter.glb", HEX + "building-mill.glb", HEX + "building-watermill.glb",
+      HEX + "grass.glb", HEX + "grass-forest.glb", HEX + "grass-hill.glb",
+      HEX + "dirt.glb", HEX + "dirt-lumber.glb",
+      HEX + "stone.glb", HEX + "stone-hill.glb", HEX + "stone-mountain.glb",
+      HEX + "water.glb", HEX + "water-island.glb", HEX + "bridge.glb",
+      HEX + "path-straight.glb", HEX + "path-corner.glb", HEX + "path-corner-sharp.glb",
+      HEX + "path-crossing.glb", HEX + "path-end.glb", HEX + "path-start.glb",
+      HEX + "path-square.glb", HEX + "path-square-end.glb",
+      HEX + "path-intersectionB.glb", HEX + "path-intersectionC.glb",
+      HEX + "river-straight.glb", HEX + "river-corner.glb", HEX + "river-corner-sharp.glb",
+      HEX + "river-start.glb", HEX + "river-end.glb", HEX + "river-crossing.glb",
+      HEX + "river-intersectionA.glb", HEX + "river-intersectionB.glb"
     ],
     desert: [
       IND + "building-e.glb", IND + "solar-panel-landscape-group.glb",
@@ -43,20 +59,31 @@
       FOR + "rocks-high.glb", FOR + "rocks-low.glb", FOR + "stones.glb"
     ],
     jungle: [
-      // Pure natural/expedition assets only — zero industrial steel/concrete factories
+      // Pure natural/expedition + coherent riverside Hexagon outpost (zero industrial steel/concrete factories)
       FOR + "building-platform.glb", FOR + "building-structure.glb", FOR + "building-roof.glb",
       FOR + "tent.glb", FOR + "fence.glb", FOR + "flag.glb",
       FOR + "tree-high.glb", FOR + "tree.glb", FOR + "plant.glb",
-      FOR + "rocks-low.glb", FOR + "stones.glb"
+      FOR + "rocks-low.glb", FOR + "stones.glb",
+      HEX + "grass.glb", HEX + "grass-forest.glb", HEX + "dirt-lumber.glb",
+      HEX + "water.glb", HEX + "water-island.glb", HEX + "bridge.glb",
+      HEX + "river-start.glb", HEX + "river-straight.glb", HEX + "river-corner.glb", HEX + "river-corner-sharp.glb", HEX + "river-end.glb",
+      HEX + "path-start.glb", HEX + "path-straight.glb", HEX + "path-end.glb",
+      HEX + "building-cabin.glb", HEX + "building-farm.glb", HEX + "building-watermill.glb"
     ],
     crystal_desert: [
       IND + "building-g.glb", IND + "solar-panel-portrait-group.glb",
       IND + "building-j.glb", IND + "solar-panel-portrait.glb",
-      FOR + "rocks-low.glb", FOR + "stones.glb"
+      FOR + "rocks-low.glb", FOR + "stones.glb",
+      HEX + "sand.glb", HEX + "sand-desert.glb", HEX + "water.glb", HEX + "water-island.glb",
+      HEX + "path-start.glb", HEX + "path-straight.glb", HEX + "path-corner.glb", HEX + "path-square.glb", HEX + "path-end.glb",
+      HEX + "building-market.glb", HEX + "building-village.glb"
     ],
     sky_islands: [
       IND + "windmill.glb", IND + "windmill-low.glb",
-      FOR + "plant.glb", FOR + "stones.glb", FOR + "flag.glb"
+      FOR + "plant.glb", FOR + "stones.glb", FOR + "flag.glb",
+      HEX + "grass.glb", HEX + "grass-hill.glb", HEX + "stone-hill.glb", HEX + "water-island.glb",
+      HEX + "path-start.glb", HEX + "path-straight.glb", HEX + "path-square.glb", HEX + "path-end.glb",
+      HEX + "building-mill.glb", HEX + "building-house.glb"
     ],
     toxic_swamp: [
       IND + "building-f.glb", IND + "water-tower.glb", IND + "detail-tank-large.glb",
@@ -65,7 +92,10 @@
     frozen_mountains: [
       IND + "building-l.glb", IND + "chimney-small.glb",
       FOR + "tree-high.glb", FOR + "tree.glb",
-      FOR + "rocks-high.glb", FOR + "rocks-low.glb", FOR + "stones.glb"
+      FOR + "rocks-high.glb", FOR + "rocks-low.glb", FOR + "stones.glb",
+      HEX + "stone.glb", HEX + "stone-hill.glb", HEX + "stone-mountain.glb", HEX + "dirt.glb",
+      HEX + "path-start.glb", HEX + "path-straight.glb", HEX + "path-end.glb",
+      HEX + "building-mine.glb", HEX + "building-smelter.glb"
     ],
     volcanic_lands: [
       IND + "building-n.glb", IND + "chimney-large.glb",
@@ -211,7 +241,7 @@
   const biomeState = {};              // biomeId -> "idle" | "loading" | "ready"
   const pendingBuildingMounts = [];   // mounts awaiting biome load
   const pendingMachineMounts = [];
-  const sceneryHooksByBiome = {};     // biomeId -> fn(manager)
+  const sceneryHooksByBiome = {};     // biomeId -> Array<fn(manager, THREE)>
 
   function getLoader(THREE) {
     if (!loaderInstance && THREE && typeof THREE.GLTFLoader === "function") {
@@ -256,7 +286,9 @@
       return Promise.resolve(null);
     }
 
-    const packKey = url.indexOf("kenney-mini-forest") !== -1 ? "forest_kit" : "industrial_kit";
+    const packKey = url.indexOf("kenney-mini-forest") !== -1
+      ? "forest_kit"
+      : (url.indexOf("kenney-hexagon-kit") !== -1 ? "hexagon_kit" : "industrial_kit");
 
     const p = new Promise((resolve) => {
       loader.load(
@@ -450,6 +482,60 @@
     return created;
   }
 
+  // Clone a Hexagon Kit tile/building preserving authentic hex plinth coordinate origin (y = 0) and extracting animated rotors
+  function cloneHexTile(THREE, asset, hexScale, x, y, z, ry) {
+    if (!asset || !asset.root) return null;
+    const holder = new THREE.Group();
+    const clone = asset.root.clone(true);
+    clone.scale.setScalar(hexScale || 1.0);
+    holder.add(clone);
+    holder.position.set(x || 0, y || 0, z || 0);
+    holder.rotation.y = ry || 0;
+
+    const rotors = [];
+    clone.traverse((obj) => {
+      if (obj.name && obj.name.indexOf("rotate-") === 0) {
+        rotors.push({ mesh: obj, axis: obj.name.slice(7) });
+      }
+    });
+    holder.userData.animRotors = rotors;
+    return holder;
+  }
+
+  // Batch Hexagon Kit static tiles into shared InstancedMeshes with exact hex plinth origin
+  function buildInstancedHexTiles(THREE, chunkGrp, asset, transforms, hexScale) {
+    if (!asset || !asset.parts || asset.parts.length === 0 || !transforms || transforms.length === 0) return [];
+    const created = [];
+    const s = hexScale || 1.0;
+    const scaleMat = new THREE.Matrix4().makeScale(s, s, s);
+    const dummy = new THREE.Object3D();
+    const partMatrix = new THREE.Matrix4();
+
+    for (let pi = 0; pi < asset.parts.length; pi++) {
+      const part = asset.parts[pi];
+      const mat = Array.isArray(part.material) ? part.material[0] : part.material;
+      const im = new THREE.InstancedMesh(part.geometry, mat, transforms.length);
+      im.castShadow = true;
+      im.receiveShadow = true;
+      im.frustumCulled = true;
+
+      const localCombined = new THREE.Matrix4().multiplyMatrices(scaleMat, part.matrixWorld);
+      for (let ti = 0; ti < transforms.length; ti++) {
+        const t = transforms[ti];
+        dummy.position.set(t.x, t.y || 0, t.z);
+        dummy.rotation.set(0, t.ry || 0, 0);
+        dummy.scale.setScalar(t.s || 1);
+        dummy.updateMatrix();
+        partMatrix.multiplyMatrices(dummy.matrix, localCombined);
+        im.setMatrixAt(ti, partMatrix);
+      }
+      im.instanceMatrix.needsUpdate = true;
+      chunkGrp.add(im);
+      created.push(im);
+    }
+    return created;
+  }
+
   function registerBuildingMount(def, structGroup, legacyBodyGroup, mountY, onMounted) {
     if (def.biome === "forest") return; // Preserve Map 1 untouched
     const spec = BUILDING_ASSEMBLIES[def.id];
@@ -483,8 +569,13 @@
   }
 
   function registerBiomeSceneryHook(biomeId, hookFn) {
-    if (biomeId === "forest") return;
-    sceneryHooksByBiome[biomeId] = hookFn;
+    if (biomeId === "forest" || typeof hookFn !== "function") return;
+    if (biomeState[biomeId] === "ready") {
+      hookFn(window.ModelAssetManager, window.THREE);
+      return;
+    }
+    if (!sceneryHooksByBiome[biomeId]) sceneryHooksByBiome[biomeId] = [];
+    sceneryHooksByBiome[biomeId].push(hookFn);
   }
 
   function mountPendingForBiome(THREE, biomeId) {
@@ -545,11 +636,13 @@
       });
     }
 
-    // 3. Upgrade biome scenery / expedition camps (trees, rocks, stones, plants, tents, fences, flags)
-    const hook = sceneryHooksByBiome[biomeId];
-    if (hook) {
+    // 3. Upgrade biome scenery / expedition camps & Hexagon districts
+    const hooks = sceneryHooksByBiome[biomeId];
+    if (hooks && hooks.length > 0) {
       delete sceneryHooksByBiome[biomeId];
-      hook(window.ModelAssetManager, THREE);
+      for (let hi = 0; hi < hooks.length; hi++) {
+        hooks[hi](window.ModelAssetManager, THREE);
+      }
     }
   }
 
@@ -575,6 +668,7 @@
   window.ModelAssetManager = {
     IND,
     FOR,
+    HEX,
     BIOME_ASSET_MANIFEST,
     loadModel: function (THREE, url) {
       return loadModel(THREE, url);
@@ -582,8 +676,14 @@
     cloneFitted: function (THREE, asset, spec) {
       return cloneFitted(THREE, asset, spec);
     },
+    cloneHexTile: function (THREE, asset, hexScale, x, y, z, ry) {
+      return cloneHexTile(THREE, asset, hexScale, x, y, z, ry);
+    },
     buildInstancedFromAsset: function (THREE, chunkGrp, asset, transforms, scaleMult, tintHexList) {
       return buildInstancedFromAsset(THREE, chunkGrp, asset, transforms, scaleMult, tintHexList);
+    },
+    buildInstancedHexTiles: function (THREE, chunkGrp, asset, transforms, hexScale) {
+      return buildInstancedHexTiles(THREE, chunkGrp, asset, transforms, hexScale);
     },
     removePlaceholderMeshes,
     registerBuildingMount,

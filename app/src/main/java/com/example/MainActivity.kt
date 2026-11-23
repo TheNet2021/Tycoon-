@@ -179,6 +179,8 @@ class MainActivity : ComponentActivity() {
                         state = gameState,
                         onDismiss = { activeSheet = ActiveSheet.NONE },
                         onStartHousing = gameViewModel::startHousingConstruction,
+                        onUpgradeHousing = gameViewModel::upgradeHousing,
+                        onBuildOrUpgradeFacility = gameViewModel::buildOrUpgradeFacility,
                         onDemolishHousing = gameViewModel::demolishHousing,
                         onAdmitRefugee = gameViewModel::admitRefugee,
                         onDismissRefugee = gameViewModel::dismissRefugee,
@@ -187,7 +189,13 @@ class MainActivity : ComponentActivity() {
                         onBuySupplies = gameViewModel::buyCommunitySupplies,
                         onSellToSurvivors = gameViewModel::sellGoodToSurvivors,
                         onBuyFromSurvivors = gameViewModel::buyGoodFromSurvivors,
-                        onCompleteContract = gameViewModel::completeSettlementContract
+                        onCompleteContract = gameViewModel::completeSettlementContract,
+                        onVisitSettlement3D = {
+                            activeSheet = ActiveSheet.NONE
+                            isInHomeMenu = false
+                            gameViewModel.setMenuMode(false)
+                            gameViewModel.teleportToSettlementEnclave()
+                        }
                     )
                     ActiveSheet.BACKPACK -> BackpackSheet(
                         state = gameState,

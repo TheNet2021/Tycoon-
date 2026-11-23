@@ -238,12 +238,17 @@
           const envScript = document.createElement("script");
           envScript.src = "biomeEnvironments.js";
           envScript.onload = envScript.onerror = function () {
-            const g = document.createElement("script");
-            g.src = "game.js";
-            g.onerror = function () {
-              document.getElementById("loading-text").textContent = "Failed to load game.js";
+            const hexScript = document.createElement("script");
+            hexScript.src = "hexagonDistrictBuilder.js";
+            hexScript.onload = hexScript.onerror = function () {
+              const g = document.createElement("script");
+              g.src = "game.js";
+              g.onerror = function () {
+                document.getElementById("loading-text").textContent = "Failed to load game.js";
+              };
+              document.body.appendChild(g);
             };
-            document.body.appendChild(g);
+            document.body.appendChild(hexScript);
           };
           document.body.appendChild(envScript);
         };

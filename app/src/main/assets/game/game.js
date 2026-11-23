@@ -4690,6 +4690,11 @@
     });
   }
 
+  // Initialize coherent Hexagon Kit enclaves across Maps 2-12 (Map 1 forest untouched)
+  if (window.HexagonDistrictBuilder) {
+    window.HexagonDistrictBuilder.initDistricts(THREE, getBiomeChunk, pbrMat);
+  }
+
   function steerAroundObstacles(ex, ez, dirX, dirZ) {
     let sx = dirX, sz = dirZ;
     for (let oi = 0; oi < worldObstacles.length; oi++) {
@@ -4884,6 +4889,7 @@
     if (isBiomeUnlocked("frozen_mountains") && Math.abs(z) <= 2.3 && x <= -48.5 && x >= -53.5) return true;
     if (isBiomeUnlocked("volcanic_lands") && Math.abs(x) <= 2.3 && z >= 48.5 && z <= 53.5) return true;
     if (isBiomeUnlocked("ancient_machine_world") && Math.abs(x - 34) <= 2.3 && z >= 14.5 && z <= 19.5) return true;
+    if (window.HexagonDistrictBuilder && window.HexagonDistrictBuilder.isWalkable(x, z, isBiomeUnlocked)) return true;
     return false;
   }
 
@@ -4994,6 +5000,10 @@
         (Math.abs(x + 34) <= 2.8 && z >= 14.0 && z <= 20.5)) {
       return 0.25;
     }
+    if (window.HexagonDistrictBuilder) {
+      const hexY = window.HexagonDistrictBuilder.getFloorY(x, z);
+      if (hexY !== null) return hexY;
+    }
     return -0.88;
   }
 
@@ -5035,6 +5045,9 @@
     applyGraphicsQuality();
     refreshCharacterVisuals();
     refreshWorldState();
+    if (incoming.settlement && window.HexagonDistrictBuilder) {
+      window.HexagonDistrictBuilder.syncSettlement(incoming.settlement);
+    }
   };
 
   window.teleportPlayer = function (x, z, biomeId) {
@@ -5154,6 +5167,10 @@
       boss.mesh.visible = !defeated;
       if (boss.arenaRing) boss.arenaRing.visible = !defeated;
     });
+
+    if (window.HexagonDistrictBuilder) {
+      window.HexagonDistrictBuilder.refreshCausewayVisibility(isBiomeUnlocked);
+    }
   }
 
   // =========================================================================
@@ -5391,6 +5408,9 @@
         sunLight.color.lerp(linCol(atmo.sunCol), atmoRate);
         sunLight.intensity += (atmo.sunInt - sunLight.intensity) * atmoRate;
         window.BiomeEnvBuilder.updateAnimations(now, dt, biomeChunkGroups);
+      }
+      if (window.HexagonDistrictBuilder) {
+        window.HexagonDistrictBuilder.updateAnimations(now, dt, biomeChunkGroups);
       }
 
       // 3B. Landmarks, Environmental Hazards & Secret Underground Caves

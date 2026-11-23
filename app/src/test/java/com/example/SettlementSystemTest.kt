@@ -282,4 +282,167 @@ class SettlementSystemTest {
         assertEquals(15, afterRestock.settlement.foodStock)
         assertFalse(afterRestock.coins == depleted.coins)
     }
+
+    @Test
+    fun housingUpgrades_consumeResourcesIncreaseCapacityAndProgressHexModel() {
+        val now = 6_000_000L
+        val cabin = HousingBuilding(
+            id = "h_cabin",
+            type = HousingType.WOODEN_CABIN,
+            startedEpochMs = now - 30_000L,
+            completesEpochMs = now - 5_000L,
+            isCompleted = true,
+            upgradeLevel = 1
+        )
+        assertEquals(5, cabin.effectiveCapacity())
+        assertEquals("building-cabin", cabin.hexModelName)
+
+        var state = TycoonSaveState(
+            coins = 5_000L,
+            warehouseStock = mapOf(
+                "wood" to 200,
+                "planks" to 200,
+                "stone" to 200,
+                "stone_blocks" to 200,
+                "metal_bars" to 50
+            ),
+            settlement = SettlementState(
+                housingUnits = listOf(cabin),
+                lastDailyTickEpochMs = now,
+                lastArrivalEpochMs = now
+            )
+        )
+
+        val tier2CoinCost = cabin.nextUpgradeCoinCost()
+        val tier2Mats = cabin.nextUpgradeMaterialCosts()
+        val up1 = SettlementEngine.upgradeHousing(state, "h_cabin", now)
+        assertTrue(up1 is SettlementActionOutcome.Success)
+        state = (up1 as SettlementActionOutcome.Success).updatedState
+
+        val hTier2 = state.settlement.housingUnits.first()
+        assertEquals(2, hTier2.upgradeLevel)
+        assertEquals("building-house", hTier2.hexModelName)
+        assertTrue(hTier2.effectiveCapacity() > 5)
+        assertEquals(5_000L - tier2CoinCost, state.coins)
+        for ((mat, req) in tier2Mats) {
+            assertEquals(
+                "Consumed $req $mat",
+                (if (mat == "metal_bars") 50 else 200) - req,
+                state.availableForTrade(mat)
+            )
+        }
+
+        // Upgrade to max Tier 3, then further upgrade must fail
+        val up2 = SettlementEngine.upgradeHousing(state, "h_cabin", now + 1000L)
+        assertTrue(up2 is SettlementActionOutcome.Success)
+        state = (up2 as SettlementActionOutcome.Success).updatedState
+        assertEquals(3, state.settlement.housingUnits.first().upgradeLevel)
+
+        val up3 = SettlementEngine.upgradeHousing(state, "h_cabin", now + 2000L)
+        assertTrue(up3 is SettlementActionOutcome.Failure)
+    }
+
+    @Test
+    fun settlementFacilities_consumeResourcesBoostProductionCapacitiesAndContracts() {
+        val now = 7_000_000L
+        var state = SettlementEngine.ensureInitialized(
+            TycoonSaveState(
+                coins = 10_000L,
+                buildingLevels = mapOf("warehouse" to 5),
+                warehouseStock = mapOf(
+                    "wood" to 45,
+                    "planks" to 45,
+                    "stone" to 45,
+                    "stone_blocks" to 45,
+                    "wood_craft" to 20,
+                    "metal_bars" to 20
+                ),
+                settlement = SettlementState(
+                    housingUnits = listOf(
+                        HousingBuilding("h1", HousingType.STONE_HOUSE, now - 30_000L, now - 5_000L, true, 2)
+                    ),
+                    lastDailyTickEpochMs = now,
+                    lastArrivalEpochMs = now
+                )
+            ),
+            now
+        )
+        assertEquals("building-village", state.settlement.housingUnits.first().hexModelName)
+
+        val baseFoodCap = state.settlement.foodCapacity
+        val baseWaterCap = state.settlement.waterCapacity
+        val baseSuppliesCap = state.settlement.suppliesCapacity
+
+        // Build Farm, Mill, Watermill, Market
+        for (facility in listOf(
+            com.example.data.SettlementFacilityType.FARM,
+            com.example.data.SettlementFacilityType.MILL,
+            com.example.data.SettlementFacilityType.WATERMILL,
+            com.example.data.SettlementFacilityType.MARKET
+        )) {
+            val coinsBefore = state.coins
+            val out = SettlementEngine.buildOrUpgradeFacility(state, facility, now + 500L)
+            assertTrue("Expected facility ${facility.id} build success", out is SettlementActionOutcome.Success)
+            state = (out as SettlementActionOutcome.Success).updatedState
+            assertEquals(1, state.settlement.facilityLevel(facility))
+            assertEquals(coinsBefore - facility.coinCostForLevel(1), state.coins)
+        }
+
+        assertTrue(state.settlement.foodCapacity > baseFoodCap)
+        assertTrue(state.settlement.waterCapacity > baseWaterCap)
+        assertTrue(state.settlement.suppliesCapacity > baseSuppliesCap)
+
+        // Ensure market facility never breaks no-arbitrage price guard
+        for (good in TradeCatalog.allGoods) {
+            val bid = state.settlement.survivorBidPrice(good, 1.30)
+            val ask = state.settlement.survivorAskPrice(good, 1.0)
+            assertTrue("Ask ($ask) must exceed bid ($bid) even with Market", ask > bid)
+        }
+
+        // Complete a resident contract that specifically targets a facility
+        val facilityContract = com.example.data.SettlementConstructionContract(
+            id = "c_smelter_req",
+            title = "Build Settlement Smeltery",
+            description = "Smelt iron & forge blocks",
+            category = SettlementContractCategory.PRODUCTION_BUILDINGS,
+            requesterName = "Darius",
+            materialRequirements = mapOf("stone_blocks" to 8, "metal_bars" to 4),
+            rewardCoins = 300L,
+            rewardXp = 80L,
+            rewardReputation = 20,
+            targetFacilityId = com.example.data.SettlementFacilityType.SETTLEMENT_SMELTER.id
+        )
+        state = state.copy(
+            settlement = state.settlement.copy(
+                openContracts = listOf(facilityContract) + state.settlement.openContracts
+            )
+        )
+        val cRes = SettlementEngine.completeConstructionContract(state, "c_smelter_req", now + 1000L)
+        assertTrue(cRes is SettlementActionOutcome.Success)
+        val afterContract = (cRes as SettlementActionOutcome.Success).updatedState
+        assertEquals(1, afterContract.settlement.facilityLevel(com.example.data.SettlementFacilityType.SETTLEMENT_SMELTER))
+
+        // Build Quarry Mine & check daily production bonuses with active workers
+        val mineOut = SettlementEngine.buildOrUpgradeFacility(
+            afterContract,
+            com.example.data.SettlementFacilityType.SETTLEMENT_MINE,
+            now + 1200L
+        )
+        assertTrue(mineOut is SettlementActionOutcome.Success)
+        var withMine = (mineOut as SettlementActionOutcome.Success).updatedState
+        val survivor = SurvivorProfile("m1", "Darius", SurvivorProfession.MINER, 2, assignedJob = SurvivorProfession.MINER, housingUnitId = "h1")
+        withMine = withMine.copy(
+            settlement = withMine.settlement.copy(survivors = listOf(survivor))
+        )
+        val stoneBeforeDay = withMine.warehouseStock["stone"] ?: 0
+        val afterDay = SettlementEngine.processDailyCycle(withMine, now + SettlementEngine.DAY_DURATION_MS)
+        assertTrue((afterDay.warehouseStock["stone"] ?: 0) > stoneBeforeDay)
+
+        // Verify contract generator produces facility-building requests for residents via ensureInitialized
+        val refreshedContractsState = SettlementEngine.ensureInitialized(
+            afterDay.copy(settlement = afterDay.settlement.copy(openContracts = emptyList())),
+            now + 2000L
+        )
+        assertTrue(refreshedContractsState.settlement.openContracts.any { it.targetFacilityId != null })
+    }
 }

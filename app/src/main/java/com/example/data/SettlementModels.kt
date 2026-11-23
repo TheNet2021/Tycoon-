@@ -147,8 +147,49 @@ data class HousingBuilding(
     val type: HousingType,
     val startedEpochMs: Long,
     val completesEpochMs: Long,
-    val isCompleted: Boolean
+    val isCompleted: Boolean,
+    val upgradeLevel: Int = 1
 ) {
+    fun effectiveCapacity(): Int {
+        if (upgradeLevel <= 1) return type.capacity
+        val perLevelExtra = maxOf(1, (type.capacity * 0.42).roundToInt())
+        return type.capacity + (upgradeLevel - 1) * perLevelExtra
+    }
+
+    fun effectiveMaintenanceCost(): Long {
+        if (upgradeLevel <= 1) return type.dailyMaintenanceCost
+        return (type.dailyMaintenanceCost * (1.0 + (upgradeLevel - 1) * 0.35)).roundToLong()
+    }
+
+    fun canUpgrade(): Boolean = isCompleted && upgradeLevel < MAX_HOUSING_LEVEL
+
+    fun nextUpgradeCoinCost(): Long =
+        ((type.coinCost * 0.72) * upgradeLevel).roundToLong().coerceAtLeast(50L)
+
+    fun nextUpgradeMaterialCosts(): Map<String, Int> = buildMap {
+        type.materialCosts.forEach { (mat, qty) ->
+            put(mat, maxOf(2, (qty * 0.55 * upgradeLevel).roundToInt()))
+        }
+        if (upgradeLevel == 1) {
+            put("planks", (this["planks"] ?: 0) + maxOf(3, type.capacity / 2))
+        } else {
+            put("stone_blocks", (this["stone_blocks"] ?: 0) + maxOf(4, type.capacity / 2))
+            if (type.ordinal >= HousingType.STONE_HOUSE.ordinal) {
+                put("metal_bars", (this["metal_bars"] ?: 0) + 3)
+            }
+        }
+    }
+
+    val hexModelName: String
+        get() = when {
+            type == HousingType.RESIDENTIAL_COMPLEX || type == HousingType.APARTMENT_BUILDING -> "building-village"
+            type == HousingType.STONE_HOUSE && upgradeLevel >= 2 -> "building-village"
+            type == HousingType.STONE_HOUSE -> "building-house"
+            type == HousingType.WOODEN_CABIN && upgradeLevel >= 2 -> "building-house"
+            type == HousingType.SMALL_TENT && upgradeLevel >= 3 -> "building-house"
+            else -> "building-cabin"
+        }
+
     fun remainingSeconds(nowMs: Long): Long {
         if (isCompleted) return 0L
         return ((completesEpochMs - nowMs) / 1000L).coerceAtLeast(0L)
@@ -160,7 +201,111 @@ data class HousingBuilding(
         val elapsed = (nowMs - startedEpochMs).coerceIn(0L, total)
         return (elapsed.toFloat() / total.toFloat()).coerceIn(0f, 1f)
     }
+
+    companion object {
+        const val MAX_HOUSING_LEVEL = 3
+    }
 }
+
+enum class SettlementFacilityType(
+    val id: String,
+    val title: String,
+    val hexModelName: String,
+    val description: String,
+    val baseCoinCost: Long,
+    val baseMaterialCosts: Map<String, Int>,
+    val accentHex: Long,
+    val maxLevel: Int = 3
+) {
+    FARM(
+        id = "farm",
+        title = "Hexagon Farmstead",
+        hexModelName = "building-farm",
+        description = "Cultivates daily food (+5/lv) & boosts Farmer yield (+15%/lv).",
+        baseCoinCost = 180L,
+        baseMaterialCosts = mapOf("wood" to 8, "planks" to 4, "stone" to 4),
+        accentHex = 0xFF34D399
+    ),
+    MILL(
+        id = "mill",
+        title = "Grain Windmill",
+        hexModelName = "building-mill",
+        description = "Expands Food (+35/lv) & Supplies (+20/lv) storage and harvests grain.",
+        baseCoinCost = 260L,
+        baseMaterialCosts = mapOf("wood" to 10, "planks" to 6, "stone_blocks" to 4),
+        accentHex = 0xFFFBBF24
+    ),
+    WATERMILL(
+        id = "watermill",
+        title = "River Watermill",
+        hexModelName = "building-watermill",
+        description = "Pumps clean river water (+5/d & +35 Water Cap per lv).",
+        baseCoinCost = 280L,
+        baseMaterialCosts = mapOf("planks" to 6, "stone" to 8, "stone_blocks" to 4),
+        accentHex = 0xFF38BDF8
+    ),
+    MARKET(
+        id = "market",
+        title = "Frontier Market",
+        hexModelName = "building-market",
+        description = "Lifts trade revenue (+18%/lv), settler bids (+4%/lv) & offer variety.",
+        baseCoinCost = 320L,
+        baseMaterialCosts = mapOf("planks" to 8, "wood_craft" to 4, "stone_blocks" to 4),
+        accentHex = 0xFFF59E0B
+    ),
+    SETTLEMENT_MINE(
+        id = "mine",
+        title = "Settlement Quarry",
+        hexModelName = "building-mine",
+        description = "Extracts stone/ores daily (+2 per lv) and boosts Miner output.",
+        baseCoinCost = 360L,
+        baseMaterialCosts = mapOf("wood" to 8, "stone" to 10, "stone_blocks" to 5),
+        accentHex = 0xFF94A3B8
+    ),
+    SETTLEMENT_SMELTER(
+        id = "smelter",
+        title = "Settlement Smeltery",
+        hexModelName = "building-smelter",
+        description = "Increases factory refining throughput (+2 batches/d per lv).",
+        baseCoinCost = 440L,
+        baseMaterialCosts = mapOf("stone_blocks" to 8, "stone" to 6, "metal_bars" to 4),
+        accentHex = 0xFFFB923C
+    );
+
+    fun coinCostForLevel(targetLevel: Int): Long {
+        val lvl = targetLevel.coerceIn(1, maxLevel)
+        return (baseCoinCost * when (lvl) {
+            1 -> 1.0
+            2 -> 1.65
+            else -> 2.5
+        }).roundToLong()
+    }
+
+    fun materialCostsForLevel(targetLevel: Int): Map<String, Int> = buildMap {
+        val lvl = targetLevel.coerceIn(1, maxLevel)
+        val mult = when (lvl) {
+            1 -> 1.0
+            2 -> 1.5
+            else -> 2.15
+        }
+        baseMaterialCosts.forEach { (k, v) -> put(k, maxOf(1, (v * mult).roundToInt())) }
+        if (lvl >= 2) {
+            put("stone_blocks", (this["stone_blocks"] ?: 0) + lvl * 2)
+        }
+        if (lvl >= 3) {
+            put("metal_bars", (this["metal_bars"] ?: 0) + 4)
+        }
+    }
+
+    companion object {
+        fun fromId(id: String): SettlementFacilityType? = entries.firstOrNull { it.id == id }
+    }
+}
+
+data class SettlementFacilityBuilding(
+    val type: SettlementFacilityType,
+    val level: Int = 1
+)
 
 enum class SettlementContractCategory(val label: String, val accentHex: Long) {
     HOUSES("Houses", 0xFF34D399),
@@ -189,7 +334,8 @@ data class SettlementConstructionContract(
     val foodCapBonus: Int = 0,
     val waterCapBonus: Int = 0,
     val passiveFoodBonus: Int = 0,
-    val passiveWaterBonus: Int = 0
+    val passiveWaterBonus: Int = 0,
+    val targetFacilityId: String? = null
 )
 
 data class SurvivorTradeOffer(
@@ -245,6 +391,7 @@ data class SettlementState(
     val survivors: List<SurvivorProfile> = emptyList(),
     val pendingArrivals: List<RefugeeArrival> = emptyList(),
     val housingUnits: List<HousingBuilding> = emptyList(),
+    val facilities: List<SettlementFacilityBuilding> = emptyList(),
     val foodStock: Int = 20,
     val waterStock: Int = 20,
     val suppliesStock: Int = 15,
@@ -264,23 +411,29 @@ data class SettlementState(
     val bonusDailyWaterProd: Int = 0,
     val transactionHistory: List<SettlementTransaction> = emptyList()
 ) {
+    fun facilityLevel(type: SettlementFacilityType): Int =
+        facilities.firstOrNull { it.type == type }?.level?.coerceIn(0, type.maxLevel) ?: 0
+
     val totalHousingCapacity: Int
-        get() = housingUnits.filter { it.isCompleted }.sumOf { it.type.capacity }
+        get() = housingUnits.filter { it.isCompleted }.sumOf { it.effectiveCapacity() }
 
     val pendingConstructionCapacity: Int
-        get() = housingUnits.filter { !it.isCompleted }.sumOf { it.type.capacity }
+        get() = housingUnits.filter { !it.isCompleted }.sumOf { it.effectiveCapacity() }
 
     val availableHousingSlots: Int
         get() = (totalHousingCapacity - survivors.size).coerceAtLeast(0)
 
     val foodCapacity: Int
-        get() = 50 + (totalHousingCapacity * 2) + bonusFoodCap
+        get() = 50 + (totalHousingCapacity * 2) + bonusFoodCap +
+            facilityLevel(SettlementFacilityType.FARM) * 15 +
+            facilityLevel(SettlementFacilityType.MILL) * 35
 
     val waterCapacity: Int
-        get() = 50 + (totalHousingCapacity * 2) + bonusWaterCap
+        get() = 50 + (totalHousingCapacity * 2) + bonusWaterCap +
+            facilityLevel(SettlementFacilityType.WATERMILL) * 35
 
     val suppliesCapacity: Int
-        get() = 40 + totalHousingCapacity
+        get() = 40 + totalHousingCapacity + facilityLevel(SettlementFacilityType.MILL) * 20
 
     fun occupantsIn(housingId: String): Int =
         survivors.count { it.housingUnitId == housingId }
@@ -294,16 +447,18 @@ data class SettlementState(
     fun survivorBidPrice(good: TradeGoodInfo, globalMarketMult: Double): Long {
         val localDemand = demandMultiplierFor(good.id)
         val repFactor = (1.0 + (reputation / 400.0)).coerceAtMost(1.22)
+        val marketLvl = facilityLevel(SettlementFacilityType.MARKET)
+        val marketFacilityMult = 1.0 + marketLvl * 0.04
         val clampedGlobal = globalMarketMult.coerceIn(0.85, 1.30)
-        // Strictly capped around 0.65x..1.25x baseValue to prevent infinite money loops
-        return (good.baseValue * localDemand * repFactor * (0.92 + (clampedGlobal - 1.0) * 0.35))
+        // Strictly capped around 0.65x..1.35x baseValue to prevent infinite money loops
+        return (good.baseValue * localDemand * repFactor * marketFacilityMult * (0.92 + (clampedGlobal - 1.0) * 0.35))
             .roundToLong()
             .coerceAtLeast(1L)
     }
 
     fun survivorAskPrice(good: TradeGoodInfo, globalMarketMult: Double): Long {
         val bid = survivorBidPrice(good, globalMarketMult)
-        // Ask is always strictly higher than bid (minimum +38% spread + 2 coins) so buy->sell arbitrage cannot profit
+        // Ask is always strictly higher than bid (minimum +42% spread + 2 coins) so buy->sell arbitrage cannot profit
         val minNoArbitrageAsk = (bid * 1.42).roundToLong() + 2L
         val marketAsk = (good.baseValue * 1.38 * globalMarketMult.coerceIn(0.95, 1.35)).roundToLong()
         return maxOf(minNoArbitrageAsk, marketAsk)
@@ -322,21 +477,30 @@ data class SettlementState(
             survivors.map { it.happiness }.average().roundToInt().coerceIn(0, 100)
         }
 
+        val farmLvl = facilityLevel(SettlementFacilityType.FARM)
+        val millLvl = facilityLevel(SettlementFacilityType.MILL)
+        val watermillLvl = facilityLevel(SettlementFacilityType.WATERMILL)
+        val marketLvl = facilityLevel(SettlementFacilityType.MARKET)
+        val farmMult = 1.0 + farmLvl * 0.15
+
         val farmers = survivors.filter { it.assignedJob == SurvivorProfession.FARMER }
-        val foodProd = farmers.sumOf { (2.6 * it.effectiveEfficiencyMultiplier()).roundToInt() } + bonusDailyFoodProd
-        val waterProd = farmers.sumOf { (2.4 * it.effectiveEfficiencyMultiplier()).roundToInt() } + bonusDailyWaterProd
+        val foodProd = farmers.sumOf { (2.6 * it.effectiveEfficiencyMultiplier() * farmMult).roundToInt() } +
+            bonusDailyFoodProd + farmLvl * 5 + millLvl * 3
+        val waterProd = farmers.sumOf { (2.4 * it.effectiveEfficiencyMultiplier()).roundToInt() } +
+            bonusDailyWaterProd + watermillLvl * 5
         val dailyConsumption = pop
 
         val salaries = survivors.sumOf { it.dailySalary() }
-        val housingMaint = housingUnits.filter { it.isCompleted }.sumOf { it.type.dailyMaintenanceCost }
+        val housingMaint = housingUnits.filter { it.isCompleted }.sumOf { it.effectiveMaintenanceCost() }
         val totalMaint = salaries + housingMaint
 
+        val marketRevMult = 1.0 + marketLvl * 0.18
         val tradersAndTransport = survivors.filter {
             it.assignedJob == SurvivorProfession.TRADER || it.assignedJob == SurvivorProfession.TRANSPORT_WORKER
         }
         val estRevenue = tradersAndTransport.sumOf { worker ->
             val base = if (worker.assignedJob == SurvivorProfession.TRADER) 14.0 else 11.0
-            (base * worker.effectiveEfficiencyMultiplier()).roundToLong()
+            (base * worker.effectiveEfficiencyMultiplier() * marketRevMult).roundToLong()
         }
 
         val tierName = when {

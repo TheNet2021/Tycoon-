@@ -21,6 +21,7 @@ import com.example.data.MachineType
 import com.example.data.ResourceUpgradeType
 import com.example.data.SettlementActionOutcome
 import com.example.data.SettlementEngine
+import com.example.data.SettlementFacilityType
 import com.example.data.SupplyRestockKind
 import com.example.data.SurvivorProfession
 import com.example.data.TradeCatalog
@@ -620,6 +621,26 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             SettlementEngine.startHousingConstruction(_gameState.value, housingType, System.currentTimeMillis())
         }
 
+    fun upgradeHousing(housingId: String): Boolean {
+        val ok = runSettlementAction("upgrade") {
+            SettlementEngine.upgradeHousing(_gameState.value, housingId, System.currentTimeMillis())
+        }
+        if (ok) {
+            _jsCommands.tryEmit("window.triggerUpgradeCelebration && window.triggerUpgradeCelebration();")
+        }
+        return ok
+    }
+
+    fun buildOrUpgradeFacility(facilityType: SettlementFacilityType): Boolean {
+        val ok = runSettlementAction("upgrade") {
+            SettlementEngine.buildOrUpgradeFacility(_gameState.value, facilityType, System.currentTimeMillis())
+        }
+        if (ok) {
+            _jsCommands.tryEmit("window.triggerUpgradeCelebration && window.triggerUpgradeCelebration();")
+        }
+        return ok
+    }
+
     fun demolishHousing(housingId: String): Boolean =
         runSettlementAction("light") {
             SettlementEngine.demolishHousing(_gameState.value, housingId)
@@ -754,6 +775,15 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun teleportToBiome(biome: BiomeType) {
         if (!_gameState.value.isBiomeUnlocked(biome)) return
         _jsCommands.tryEmit("window.teleportPlayer(${biome.spawnX}, ${biome.spawnZ}, '${biome.id}');")
+    }
+
+    fun teleportToSettlementEnclave() {
+        if (!_gameState.value.isBiomeUnlocked(BiomeType.MOUNTAINS)) {
+            val safe = JSONObject.quote("Unlock Rocky Mountains (Map 2) to walk into your 3D Hexagon Settlement!")
+            _jsCommands.tryEmit("window.showNativeBanner && window.showNativeBanner($safe);")
+            return
+        }
+        _jsCommands.tryEmit("window.teleportPlayer(-21.5, -34.0, 'mountains');")
     }
 
     fun setMenuMode(inMenu: Boolean) {
