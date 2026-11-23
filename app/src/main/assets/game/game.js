@@ -123,13 +123,26 @@
     insectsDefeated: 0,
     playerHp: 100,
     isMuted: false,
+    masterVolume: 1.0,
+    ambientVolume: 0.70,
+    weatherVolume: 0.75,
+    waterVolume: 0.80,
     sfxVolume: 0.85,
     musicVolume: 0.45,
+    nativeHasNatureAudio: false,
     graphicsQuality: 1,
-    hapticsEnabled: true
+    hapticsEnabled: true,
+    shadowQuality: 1,
+    cameraSensitivity: 1.0,
+    cameraDistance: 12.2,
+    fpsLimit: 60,
+    playerPosX: 0.0,
+    playerPosZ: 2.0,
+    lastBiomeId: "forest"
   };
 
   let isMenuMode = true;
+  let isAppBackgrounded = false;
   let stateDirty = false;
   let lastSyncTime = 0;
 
@@ -261,6 +274,8 @@
   let musicStep = 0;
   let musicTimer = 0;
   let ambientTimer = 0;
+  let fallbackBed = null;
+  let birdChirpTimer = 2.8;
   const BIOME_SCALES = {
     forest:                [261.63, 293.66, 329.63, 392.00, 440.00, 523.25, 392.00, 329.63],
     mountains:             [196.00, 220.00, 246.94, 293.66, 329.63, 392.00, 293.66, 220.00],
@@ -277,7 +292,7 @@
   };
 
   function ensureAudio() {
-    if (state.isMuted) return null;
+    if (state.isMuted || isAppBackgrounded) return null;
     if (!audioCtx) {
       const AC = window.AudioContext || window.webkitAudioContext;
       if (AC) audioCtx = new AC();
@@ -286,22 +301,84 @@
       audioCtx.resume().catch(function () {});
     }
     if (audioCtx && !noiseBuffer) {
-      const len = Math.floor(audioCtx.sampleRate * 0.35);
+      const len = Math.floor(audioCtx.sampleRate * 1.5);
       noiseBuffer = audioCtx.createBuffer(1, len, audioCtx.sampleRate);
       const data = noiseBuffer.getChannelData(0);
-      for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+      let b0 = 0, b1 = 0, b2 = 0;
+      for (let i = 0; i < len; i++) {
+        const white = Math.random() * 2 - 1;
+        b0 = 0.997 * b0 + white * 0.029;
+        b1 = 0.985 * b1 + white * 0.032;
+        b2 = 0.950 * b2 + white * 0.048;
+        data[i] = Math.max(-1, Math.min(1, (b0 + b1 + b2) * 1.6));
+      }
     }
     return audioCtx;
   }
 
+  function getMasterGain() {
+    if (state.isMuted || isAppBackgrounded) return 0;
+    return Math.max(0, Math.min(1, typeof state.masterVolume === "number" ? state.masterVolume : 1.0));
+  }
+
   function getSfxGain() {
-    if (state.isMuted) return 0;
-    return Math.max(0, Math.min(1, typeof state.sfxVolume === "number" ? state.sfxVolume : 0.85));
+    const m = getMasterGain();
+    if (m <= 0) return 0;
+    return m * Math.max(0, Math.min(1, typeof state.sfxVolume === "number" ? state.sfxVolume : 0.85));
   }
 
   function getMusicGain() {
-    if (state.isMuted) return 0;
-    return Math.max(0, Math.min(1, typeof state.musicVolume === "number" ? state.musicVolume : 0.45));
+    const m = getMasterGain();
+    if (m <= 0) return 0;
+    return m * Math.max(0, Math.min(1, typeof state.musicVolume === "number" ? state.musicVolume : 0.45));
+  }
+
+  function getAmbientGain() {
+    const m = getMasterGain();
+    if (m <= 0) return 0;
+    return m * Math.max(0, Math.min(1, typeof state.ambientVolume === "number" ? state.ambientVolume : 0.70));
+  }
+
+  function ensureNatureFallbackBed(ctx) {
+    if (fallbackBed || !ctx || !noiseBuffer) return fallbackBed;
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuffer;
+    src.loop = true;
+    const filter = ctx.createBiquadFilter();
+    filter.type = "bandpass";
+    filter.frequency.value = 540;
+    filter.Q.value = 0.8;
+    const gain = ctx.createGain();
+    gain.gain.value = 0;
+    src.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    src.start();
+    fallbackBed = { src: src, filter: filter, gain: gain };
+    return fallbackBed;
+  }
+
+  function playSoftBirdPhrase(ctx, vol) {
+    if (!ctx || vol <= 0.004) return;
+    const t0 = ctx.currentTime + 0.02;
+    const baseF = 1650 + Math.random() * 950;
+    const chirps = 2 + (Math.random() > 0.45 ? 1 : 0);
+    for (let c = 0; c < chirps; c++) {
+      const start = t0 + c * 0.11;
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = "sine";
+      const f0 = baseF * (1 + c * 0.08);
+      osc.frequency.setValueAtTime(f0, start);
+      osc.frequency.exponentialRampToValueAtTime(f0 * (c % 2 === 0 ? 1.24 : 0.86), start + 0.075);
+      g.gain.setValueAtTime(0.0005, start);
+      g.gain.linearRampToValueAtTime(Math.min(0.032, vol * 0.04), start + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.0004, start + 0.085);
+      osc.connect(g);
+      g.connect(ctx.destination);
+      osc.start(start);
+      osc.stop(start + 0.095);
+    }
   }
 
   function playTone(freq, endFreq, dur, type, baseVol, delaySec) {
@@ -441,57 +518,92 @@
     }
   }
 
-  function tickBackgroundMusic(dt, biomeId) {
+  function tickBackgroundMusic(dt, biomeId, indoorFactor, rainIntensity) {
+    if (isAppBackgrounded || state.isMuted) {
+      if (fallbackBed && audioCtx) {
+        fallbackBed.gain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.08);
+      }
+      return;
+    }
     const mg = getMusicGain();
-    if (mg <= 0.01 || !audioCtx || audioCtx.state !== "running") return;
-    musicTimer += dt;
-    if (musicTimer >= 1.05) {
-      musicTimer = 0;
-      const now = audioCtx.currentTime;
-      const scale = BIOME_SCALES[biomeId] || BIOME_SCALES.forest;
-      const freq = scale[musicStep % scale.length];
-      const harmony = scale[(musicStep + 2) % scale.length] * 0.5;
-      musicStep++;
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.type = biomeId === "ancient_machine_world" ? "triangle" : "sine";
-      osc.frequency.setValueAtTime(freq, now);
-      gain.gain.setValueAtTime(0.001, now);
-      gain.gain.linearRampToValueAtTime(0.04 * mg, now + 0.04);
-      gain.gain.exponentialRampToValueAtTime(0.0006, now + 0.92);
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-      osc.start(now);
-      osc.stop(now + 0.95);
-      if (musicStep % 2 === 1) {
-        const pad = audioCtx.createOscillator();
-        const padGain = audioCtx.createGain();
-        pad.type = "triangle";
-        pad.frequency.setValueAtTime(harmony, now);
-        padGain.gain.setValueAtTime(0.001, now);
-        padGain.gain.linearRampToValueAtTime(0.023 * mg, now + 0.18);
-        padGain.gain.exponentialRampToValueAtTime(0.0006, now + 1.85);
-        pad.connect(padGain);
-        padGain.connect(audioCtx.destination);
-        pad.start(now);
-        pad.stop(now + 1.9);
+    if (mg > 0.01 && audioCtx && audioCtx.state === "running") {
+      musicTimer += dt;
+      if (musicTimer >= 1.05) {
+        musicTimer = 0;
+        const now = audioCtx.currentTime;
+        const scale = BIOME_SCALES[biomeId] || BIOME_SCALES.forest;
+        const freq = scale[musicStep % scale.length];
+        const harmony = scale[(musicStep + 2) % scale.length] * 0.5;
+        musicStep++;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = biomeId === "ancient_machine_world" ? "triangle" : "sine";
+        osc.frequency.setValueAtTime(freq, now);
+        gain.gain.setValueAtTime(0.001, now);
+        gain.gain.linearRampToValueAtTime(0.04 * mg, now + 0.04);
+        gain.gain.exponentialRampToValueAtTime(0.0006, now + 0.92);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(now);
+        osc.stop(now + 0.95);
+        if (musicStep % 2 === 1) {
+          const pad = audioCtx.createOscillator();
+          const padGain = audioCtx.createGain();
+          pad.type = "triangle";
+          pad.frequency.setValueAtTime(harmony, now);
+          padGain.gain.setValueAtTime(0.001, now);
+          padGain.gain.linearRampToValueAtTime(0.023 * mg, now + 0.18);
+          padGain.gain.exponentialRampToValueAtTime(0.0006, now + 1.85);
+          pad.connect(padGain);
+          padGain.connect(audioCtx.destination);
+          pad.start(now);
+          pad.stop(now + 1.9);
+        }
+      }
+
+      // Subtle biome atmospheric sound texture
+      ambientTimer += dt;
+      if (ambientTimer >= 3.2 && !isMenuMode) {
+        ambientTimer = 0;
+        if (biomeId === "sky_islands" || biomeId === "frozen_mountains" || biomeId === "frozen") {
+          playNoiseBurst(950, 1.4, 0.34, 0.025, 0, "bandpass");
+        } else if (biomeId === "toxic_swamp") {
+          playTone(210, 340, 0.14, "sine", 0.028, 0);
+        } else if (biomeId === "crystal_desert") {
+          playTone(1480, 1520, 0.22, "sine", 0.02, 0);
+        } else if (biomeId === "volcanic" || biomeId === "volcanic_lands") {
+          playTone(72, 54, 0.32, "sine", 0.032, 0);
+        } else if (biomeId === "ancient_machine_world") {
+          playTone(165, 165, 0.18, "triangle", 0.022, 0);
+        }
       }
     }
 
-    // Subtle biome atmospheric sound texture
-    ambientTimer += dt;
-    if (ambientTimer >= 3.2 && !isMenuMode) {
-      ambientTimer = 0;
-      if (biomeId === "sky_islands" || biomeId === "frozen_mountains" || biomeId === "frozen") {
-        playNoiseBurst(950, 1.4, 0.34, 0.025, 0, "bandpass");
-      } else if (biomeId === "toxic_swamp") {
-        playTone(210, 340, 0.14, "sine", 0.028, 0);
-      } else if (biomeId === "crystal_desert") {
-        playTone(1480, 1520, 0.22, "sine", 0.02, 0);
-      } else if (biomeId === "volcanic" || biomeId === "volcanic_lands") {
-        playTone(72, 54, 0.32, "sine", 0.032, 0);
-      } else if (biomeId === "ancient_machine_world") {
-        playTone(165, 165, 0.18, "triangle", 0.022, 0);
+    // Procedural outdoor nature fallback (used ONLY when no nature MP3 is bundled in assets/audio/)
+    if (audioCtx && audioCtx.state === "running") {
+      if (state.nativeHasNatureAudio) {
+        if (fallbackBed) fallbackBed.gain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.15);
+      } else {
+        const ag = getAmbientGain();
+        const biomeWeight = (biomeId === "forest" || biomeId === "jungle") ? 1.0 :
+          ((biomeId === "mountains" || biomeId === "sky_islands") ? 0.8 :
+          (biomeId === "toxic_swamp" ? 0.55 :
+          ((biomeId === "volcanic" || biomeId === "volcanic_lands" || biomeId === "ancient_machine_world") ? 0.1 : 0.3)));
+        const indoorScale = Math.max(0, 1 - (indoorFactor || 0) * 0.88);
+        const menuScale = isMenuMode ? 0.5 : 1.0;
+        const rainDuck = 1 - (rainIntensity || 0) * 0.28;
+        const targetNature = ag * biomeWeight * indoorScale * menuScale * rainDuck;
+        const bed = ensureNatureFallbackBed(audioCtx);
+        if (bed) {
+          bed.gain.gain.setTargetAtTime(targetNature * 0.028, audioCtx.currentTime, 0.35);
+        }
+        birdChirpTimer -= dt;
+        if (birdChirpTimer <= 0) {
+          birdChirpTimer = 3.2 + Math.random() * 4.5;
+          if (!isMenuMode && targetNature > 0.12 && (biomeId === "forest" || biomeId === "jungle" || biomeId === "mountains" || biomeId === "sky_islands")) {
+            playSoftBirdPhrase(audioCtx, targetNature);
+          }
+        }
       }
     }
   }
@@ -680,19 +792,30 @@
   scene.add(rimLight);
   scene.add(rimLight.target);
 
+  let lastShadowMapRes = 1024;
   function applyGraphicsQuality() {
     const q = typeof state.graphicsQuality === "number" ? state.graphicsQuality : 1;
+    const sq = typeof state.shadowQuality === "number" ? state.shadowQuality : q;
     const dpr = window.devicePixelRatio || 1;
     if (q === 0) {
       renderer.setPixelRatio(Math.min(dpr, 1.15));
-      renderer.shadowMap.enabled = false;
     } else if (q === 1) {
       renderer.setPixelRatio(Math.min(dpr, 1.65));
-      renderer.shadowMap.enabled = true;
     } else {
       renderer.setPixelRatio(Math.min(dpr, 2.0));
-      renderer.shadowMap.enabled = true;
     }
+
+    const shadowsEnabled = sq > 0;
+    renderer.shadowMap.enabled = shadowsEnabled;
+    const targetRes = sq >= 2 ? 2048 : 1024;
+    if (shadowsEnabled && targetRes !== lastShadowMapRes) {
+      lastShadowMapRes = targetRes;
+      sunLight.shadow.mapSize.set(targetRes, targetRes);
+      rimLight.shadow.mapSize.set(Math.min(1024, targetRes), Math.min(1024, targetRes));
+      if (sunLight.shadow.map) { sunLight.shadow.map.dispose(); sunLight.shadow.map = null; }
+      if (rimLight.shadow.map) { rimLight.shadow.map.dispose(); rimLight.shadow.map = null; }
+    }
+    renderer.shadowMap.needsUpdate = true;
   }
 
   // =========================================================================
@@ -4772,8 +4895,22 @@
   joyZone.addEventListener("pointercancel", resetJoystick);
 
   // =========================================================================
-  // 12B. MOBILE-FRIENDLY THIRD-PERSON CAMERA CONTROLS (ORBIT + PINCH ZOOM)
+  // 12B. UNIFIED THIRD-PERSON & MENU CAMERA CONTROLLER (SINGLE STATE MACHINE)
   // =========================================================================
+  const CAM_MODE_MENU = "MENU";
+  const CAM_MODE_TRANSITION = "TRANSITION_TO_GAME";
+  const CAM_MODE_GAMEPLAY = "GAMEPLAY";
+  let camMode = CAM_MODE_MENU;
+
+  function getPreferredCamDist() {
+    const d = typeof state.cameraDistance === "number" ? state.cameraDistance : 12.2;
+    return clampVal(d, 8.0, 18.0);
+  }
+  function getCameraSensitivity() {
+    const s = typeof state.cameraSensitivity === "number" ? state.cameraSensitivity : 1.0;
+    return clampVal(s, 0.5, 2.0);
+  }
+
   let camTargetYaw = 0;
   let camYaw = 0;
   let camTargetPitch = 0.54;
@@ -4782,6 +4919,17 @@
   let camDist = 12.2;
   let camSafeDist = 12.2;
   const camLookTarget = new THREE.Vector3(0, 0.92, 2.0);
+  const currentCamLookAt = new THREE.Vector3(0, 1.05, 1.4);
+
+  // Smooth menu -> gameplay transition state (no dual-controller fighting)
+  const transStartPos = new THREE.Vector3();
+  const transStartLook = new THREE.Vector3();
+  const transGoalPos = new THREE.Vector3();
+  let transStartFov = MENU_FOV;
+  let transStartPlayerYaw = 0;
+  let transElapsed = 0;
+  const TRANS_DURATION = 0.78;
+  let menuShowcasePhase = 0;
 
   const camPointers = new Map();
   let prevPinchDist = null;
@@ -4802,7 +4950,7 @@
 
   canvas.addEventListener("pointerdown", (e) => {
     ensureAudio();
-    if (isMenuMode) return;
+    if (isMenuMode || camMode !== CAM_MODE_GAMEPLAY) return;
     if (e.target && (e.target === joyZone || joyZone.contains(e.target))) return;
     if (e.pointerId === activePointerId) return;
     camPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -4822,13 +4970,14 @@
     const dy = e.clientY - prev.y;
     camPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
-    if (isMenuMode) return;
+    if (isMenuMode || camMode !== CAM_MODE_GAMEPLAY) return;
+    const sens = getCameraSensitivity();
     if (camPointers.size === 1) {
       if (camTapStart && Math.hypot(e.clientX - camTapStart.x, e.clientY - camTapStart.y) > 10) {
         camTapStart.moved = true;
       }
-      camTargetYaw -= dx * 0.0062;
-      camTargetPitch = clampVal(camTargetPitch + dy * 0.0048, 0.22, 1.18);
+      camTargetYaw -= dx * 0.0062 * sens;
+      camTargetPitch = clampVal(camTargetPitch + dy * 0.0048 * sens, 0.22, 1.18);
     } else if (camPointers.size >= 2) {
       const curDist = getTwoPointerDist();
       if (prevPinchDist !== null && curDist > 0) {
@@ -4842,12 +4991,12 @@
   function releaseCamPointer(e) {
     if (!camPointers.has(e.pointerId)) return;
     camPointers.delete(e.pointerId);
-    if (camPointers.size === 0 && camTapStart && !camTapStart.moved && !isMenuMode) {
+    if (camPointers.size === 0 && camTapStart && !camTapStart.moved && !isMenuMode && camMode === CAM_MODE_GAMEPLAY) {
       const nowT = performance.now();
       if (nowT - lastCamTapTime < 290) {
         camTargetYaw = 0;
         camTargetPitch = 0.54;
-        camTargetDist = 12.2;
+        camTargetDist = getPreferredCamDist();
         lastCamTapTime = 0;
       } else {
         lastCamTapTime = nowT;
@@ -4860,7 +5009,7 @@
   window.addEventListener("pointercancel", releaseCamPointer);
 
   canvas.addEventListener("wheel", (e) => {
-    if (isMenuMode) return;
+    if (isMenuMode || camMode !== CAM_MODE_GAMEPLAY) return;
     e.preventDefault();
     camTargetDist = clampVal(camTargetDist + e.deltaY * 0.012, 6.8, 22.0);
   }, { passive: false });
@@ -4905,9 +5054,17 @@
 
   function syncToAndroid(force) {
     const now = performance.now();
+    if (!isMenuMode && !force && Math.hypot(playerGroup.position.x - (state.playerPosX || 0), playerGroup.position.z - (state.playerPosZ || 2)) > 1.5 && now - lastSyncTime > 2000) {
+      stateDirty = true;
+    }
     if (!force && (!stateDirty || now - lastSyncTime < 250)) return;
     stateDirty = false;
     lastSyncTime = now;
+    if (!isMenuMode) {
+      state.playerPosX = Math.round(playerGroup.position.x * 100) / 100;
+      state.playerPosZ = Math.round(playerGroup.position.z * 100) / 100;
+      state.lastBiomeId = activeBiomeId;
+    }
     if (window.AndroidBridge && window.AndroidBridge.syncState) {
       try { window.AndroidBridge.syncState(JSON.stringify(state)); } catch (_) {}
     }
@@ -5020,21 +5177,177 @@
     }
   }
 
-  window.setMenuMode = function (inMenu) {
-    isMenuMode = Boolean(inMenu);
-    if (joyZoneEl) joyZoneEl.style.display = isMenuMode ? "none" : "block";
-    if (floatLayer) floatLayer.style.display = isMenuMode ? "none" : "block";
-    if (isMenuMode) {
-      resetJoystick({ pointerId: activePointerId });
-      camPointers.clear();
+  function computeMenuCameraPose(phase, px, pz, outPos, outLook) {
+    const orbitAng = Math.sin(phase) * 0.34;
+    outPos.set(
+      px + Math.sin(orbitAng) * 3.1 + 0.65,
+      1.92 + Math.sin(phase * 0.7) * 0.10,
+      pz + Math.cos(orbitAng) * 3.85
+    );
+    outLook.set(px + 0.12, 1.08, pz - 1.35);
+  }
+
+  function computeGameplayCameraPose(px, pz, dist, yaw, pitch, outPos) {
+    const dirX = Math.cos(pitch) * Math.sin(yaw);
+    const dirY = Math.sin(pitch);
+    const dirZ = Math.cos(pitch) * Math.cos(yaw);
+    const hitDist = raycastCamColliders(px, 0.92, pz, dirX, dirY, dirZ, dist);
+    const safeD = Math.max(3.2, hitDist < dist ? hitDist - 0.52 : dist);
+    const gx = px + dirX * safeD;
+    const gz = pz + dirZ * safeD;
+    const floorClearY = getTerrainFloorY(gx, gz) + 0.95;
+    const gy = Math.max(floorClearY, 0.92 + dirY * safeD);
+    outPos.set(gx, gy, gz);
+    return safeD;
+  }
+
+  function startMenuShowcaseCamera(immediate) {
+    isMenuMode = true;
+    camMode = CAM_MODE_MENU;
+    // Always frame the Main Menu showcase inside the detailed Forest Settlement clearing
+    playerGroup.position.set(0, 0, 2);
+    updateWorldStreaming(0, 2);
+    if (joyZoneEl) joyZoneEl.style.display = "none";
+    if (floatLayer) floatLayer.style.display = "none";
+    resetJoystick({ pointerId: activePointerId });
+    camPointers.clear();
+    camTapStart = null;
+    prevPinchDist = null;
+    if (immediate) {
+      computeMenuCameraPose(menuShowcasePhase, 0, 2, camera.position, currentCamLookAt);
+      camera.fov = MENU_FOV;
+      camera.updateProjectionMatrix();
+      camera.lookAt(currentCamLookAt);
+    }
+  }
+
+  function beginMenuToGameplayTransition(targetX, targetZ) {
+    // 1. Disable menu camera controller immediately and clear any drag pointers
+    isMenuMode = false;
+    camMode = CAM_MODE_TRANSITION;
+    camPointers.clear();
+    camTapStart = null;
+    prevPinchDist = null;
+    resetJoystick({ pointerId: activePointerId });
+    if (joyZoneEl) joyZoneEl.style.display = "block";
+    if (floatLayer) floatLayer.style.display = "block";
+
+    // 2. Snapshot exact start pose so transition begins seamlessly without jump
+    transStartPos.copy(camera.position);
+    transStartLook.copy(currentCamLookAt);
+    transStartFov = camera.fov;
+    transStartPlayerYaw = playerGroup.rotation.y;
+    transElapsed = 0;
+
+    // 3. Lock target gameplay spherical params so hand-off to GAMEPLAY has 0 discontinuity
+    camTargetYaw = 0;
+    camYaw = 0;
+    camTargetPitch = 0.54;
+    camPitch = 0.54;
+    camTargetDist = getPreferredCamDist();
+    camDist = camTargetDist;
+    camLookTarget.set(targetX, 0.92, targetZ);
+    camSafeDist = computeGameplayCameraPose(
+      targetX, targetZ, camDist, camYaw, camPitch, transGoalPos
+    );
+    updateWorldStreaming(targetX, targetZ);
+  }
+
+  window.enterGameplay = function (isContinue, savedX, savedZ, savedBiomeId) {
+    ensureAudio();
+    const useContinue = Boolean(isContinue);
+    const hasCoords = typeof savedX === "number" && !isNaN(savedX) && typeof savedZ === "number" && !isNaN(savedZ);
+    const targetX = useContinue && hasCoords ? savedX : 0;
+    const targetZ = useContinue && hasCoords ? savedZ : 2;
+    const biomeStr = typeof savedBiomeId === "string" && savedBiomeId ? savedBiomeId : "forest";
+
+    // Guard against duplicate entry calls that could interrupt an active transition/gameplay camera
+    if (!isMenuMode && camMode !== CAM_MODE_MENU && !useContinue) {
+      return;
+    }
+
+    const sameClearing = Math.hypot(targetX - 0, targetZ - 2) < 5.5 && biomeStr === "forest";
+    if (camMode === CAM_MODE_MENU && sameClearing) {
+      playerGroup.position.set(targetX, 0, targetZ);
+      beginMenuToGameplayTransition(targetX, targetZ);
     } else {
-      ensureAudio();
-      updateWorldStreaming(playerGroup.position.x, playerGroup.position.z);
+      // Distant biome/position restore behind loading overlay: switch directly & cleanly
+      isMenuMode = false;
+      camMode = CAM_MODE_GAMEPLAY;
+      camPointers.clear();
+      camTapStart = null;
+      prevPinchDist = null;
+      resetJoystick({ pointerId: activePointerId });
+      if (joyZoneEl) joyZoneEl.style.display = "block";
+      if (floatLayer) floatLayer.style.display = "block";
+      playerGroup.position.set(targetX, 0, targetZ);
+      playerGroup.rotation.y = 0;
+      camTargetYaw = 0; camYaw = 0;
+      camTargetPitch = 0.54; camPitch = 0.54;
+      camTargetDist = getPreferredCamDist();
+      camDist = camTargetDist;
+      camLookTarget.set(targetX, 0.92, targetZ);
+      currentCamLookAt.copy(camLookTarget);
+      camSafeDist = computeGameplayCameraPose(targetX, targetZ, camDist, camYaw, camPitch, camera.position);
+      camera.fov = GAMEPLAY_FOV;
+      camera.updateProjectionMatrix();
+      camera.lookAt(camLookTarget);
+      updateWorldStreaming(targetX, targetZ);
+      const bNow = currentBiomeAt(targetX, targetZ);
+      if (bNow.id !== activeBiomeId) {
+        activeBiomeId = bNow.id;
+        if (window.AndroidBridge && window.AndroidBridge.onBiomeChanged) {
+          try { window.AndroidBridge.onBiomeChanged(bNow.id); } catch (_) {}
+        }
+      }
+    }
+    emitAmbientTelemetry(
+      performance.now(),
+      currentBiomeAt(playerGroup.position.x, playerGroup.position.z).id,
+      playerGroup.position.x,
+      playerGroup.position.z,
+      true
+    );
+  };
+
+  window.setMenuMode = function (inMenu) {
+    const wantMenu = Boolean(inMenu);
+    if (wantMenu) {
+      if (camMode === CAM_MODE_MENU && isMenuMode) return;
+      if (!isMenuMode) {
+        syncToAndroid(true);
+      }
+      startMenuShowcaseCamera(false);
+      emitAmbientTelemetry(performance.now(), "forest", 0, 2, true);
+    } else {
+      if (camMode !== CAM_MODE_MENU && !isMenuMode) return;
+      window.enterGameplay(false, playerGroup.position.x, playerGroup.position.z, activeBiomeId);
     }
   };
 
+  window.setAppBackgrounded = function (bg) {
+    isAppBackgrounded = Boolean(bg);
+    if (audioCtx) {
+      if (isAppBackgrounded) {
+        if (audioCtx.state === "running") {
+          audioCtx.suspend().catch(function () {});
+        }
+      } else if (!state.isMuted && audioCtx.state === "suspended") {
+        audioCtx.resume().catch(function () {});
+      }
+    }
+    if (!isAppBackgrounded) {
+      prevTime = performance.now();
+    }
+  };
+
+  document.addEventListener("visibilitychange", function () {
+    window.setAppBackgrounded(Boolean(document.hidden));
+  });
+
   window.applyGameState = function (incoming) {
     if (!incoming) return;
+    const prevCamDistPref = typeof state.cameraDistance === "number" ? state.cameraDistance : 12.2;
     state = Object.assign({}, state, incoming);
     if (!Array.isArray(state.discoveredSecrets)) state.discoveredSecrets = [];
     if (!Array.isArray(state.defeatedBosses)) state.defeatedBosses = [];
@@ -5042,6 +5355,14 @@
     if (typeof state.insectsDefeated !== "number") state.insectsDefeated = 0;
     if (typeof state.playerHp !== "number" || state.playerHp <= 0) state.playerHp = getPlayerMaxHp();
     state.playerHp = Math.min(state.playerHp, getPlayerMaxHp());
+    if (typeof state.cameraDistance === "number" && Math.abs(state.cameraDistance - prevCamDistPref) > 0.01) {
+      camTargetDist = getPreferredCamDist();
+    }
+    if (audioCtx && (state.isMuted || isAppBackgrounded) && audioCtx.state === "running") {
+      audioCtx.suspend().catch(function () {});
+    } else if (audioCtx && !state.isMuted && !isAppBackgrounded && audioCtx.state === "suspended") {
+      audioCtx.resume().catch(function () {});
+    }
     applyGraphicsQuality();
     refreshCharacterVisuals();
     refreshWorldState();
@@ -5051,9 +5372,32 @@
   };
 
   window.teleportPlayer = function (x, z, biomeId) {
+    if (isMenuMode || camMode === CAM_MODE_MENU) {
+      isMenuMode = false;
+      if (joyZoneEl) joyZoneEl.style.display = "block";
+      if (floatLayer) floatLayer.style.display = "block";
+    }
+    camMode = CAM_MODE_GAMEPLAY;
     playerGroup.position.set(x, 0, z);
     camLookTarget.set(x, 0.92, z);
+    currentCamLookAt.copy(camLookTarget);
+    camSafeDist = computeGameplayCameraPose(x, z, camDist, camYaw, camPitch, camera.position);
+    camera.fov = GAMEPLAY_FOV;
+    camera.updateProjectionMatrix();
+    camera.lookAt(camLookTarget);
     updateWorldStreaming(x, z);
+    const bNow = currentBiomeAt(x, z);
+    if (bNow.id !== activeBiomeId) {
+      activeBiomeId = bNow.id;
+      if (window.AndroidBridge && window.AndroidBridge.onBiomeChanged) {
+        try { window.AndroidBridge.onBiomeChanged(bNow.id); } catch (_) {}
+      }
+    }
+    if (!RAIN_BIOMES[bNow.id] && weatherState !== "CLEAR") {
+      weatherState = "CLEAR";
+      weatherTimer = 14 + Math.random() * 14;
+    }
+    emitAmbientTelemetry(performance.now(), bNow.id, x, z, true);
     const found = BIOMES.find(function (b) { return b.id === biomeId; });
     showBanner("Traveled to " + (found ? found.name : "Region"));
   };
@@ -5080,9 +5424,13 @@
     camLookTarget.set(0, 0.92, 2);
     camTargetYaw = 0; camYaw = 0;
     camTargetPitch = 0.54; camPitch = 0.54;
-    camTargetDist = 12.2; camDist = 12.2; camSafeDist = 12.2;
+    const prefDist = getPreferredCamDist();
+    camTargetDist = prefDist; camDist = prefDist; camSafeDist = prefDist;
     state.playerHp = getPlayerMaxHp();
     state.activeVehicleId = null;
+    state.playerPosX = 0.0;
+    state.playerPosZ = 2.0;
+    state.lastBiomeId = "forest";
     resourceNodes.forEach((n) => {
       n.hp = n.maxHp;
       n.respawnTimer = 0;
@@ -5107,8 +5455,14 @@
       e.vis.hpFill.scale.x = 1;
       e.vis.hpBarGrp.visible = e.isBoss;
     });
+    weatherState = "CLEAR";
+    weatherTimer = 26.0;
+    rainIntensity = 0.0;
+    overcastFactor = 0.0;
+    rainMesh.visible = false;
     refreshCharacterVisuals();
     refreshWorldState();
+    emitAmbientTelemetry(performance.now(), "forest", 0, 2, true);
     showBanner("New Frontier Started!");
   };
 
@@ -5187,6 +5541,244 @@
   let combatDamageCooldown = 0;
   let hpRegenAccum = 0;
 
+  // =========================================================================
+  // 14A. DYNAMIC WEATHER SYSTEM, RIVER AUDIO ZONES & INDOOR SENSING
+  // =========================================================================
+  const RAIN_BIOMES = {
+    forest: true,
+    mountains: true,
+    jungle: true,
+    toxic_swamp: true,
+    sky_islands: true
+  };
+  let weatherState = "CLEAR"; // "CLEAR" | "OVERCAST" | "RAIN"
+  let weatherTimer = 26.0;
+  let rainIntensity = 0.0;
+  let overcastFactor = 0.0;
+  let lastWeatherBiomeId = "forest";
+
+  // Pooled 3D rain streaks (zero per-frame geometry/material allocation; hidden when clear)
+  const RAIN_DROP_COUNT = 160;
+  const rainPositions = new Float32Array(RAIN_DROP_COUNT * 6);
+  const rainMeta = new Float32Array(RAIN_DROP_COUNT * 4); // xOff, yPos, zOff, speed
+  for (let ri = 0; ri < RAIN_DROP_COUNT; ri++) {
+    const idx4 = ri * 4;
+    rainMeta[idx4] = (Math.random() - 0.5) * 26;
+    rainMeta[idx4 + 1] = Math.random() * 14;
+    rainMeta[idx4 + 2] = (Math.random() - 0.5) * 26;
+    rainMeta[idx4 + 3] = 16 + Math.random() * 8;
+  }
+  const rainGeo = new THREE.BufferGeometry();
+  const rainPosAttr = new THREE.BufferAttribute(rainPositions, 3);
+  rainPosAttr.setUsage(THREE.DynamicDrawUsage);
+  rainGeo.setAttribute("position", rainPosAttr);
+  const rainMat = new THREE.LineBasicMaterial({
+    color: 0xcbe7ff,
+    transparent: true,
+    opacity: 0.0,
+    depthWrite: false
+  });
+  const rainMesh = new THREE.LineSegments(rainGeo, rainMat);
+  rainMesh.frustumCulled = false;
+  rainMesh.visible = false;
+  scene.add(rainMesh);
+
+  window.setWeatherState = function (nextWeather) {
+    if (nextWeather === "RAIN" || nextWeather === "OVERCAST" || nextWeather === "CLEAR") {
+      weatherState = nextWeather;
+      weatherTimer = nextWeather === "RAIN" ? 32.0 : (nextWeather === "OVERCAST" ? 10.0 : 38.0);
+    }
+  };
+
+  function tickWeather(dt, biomeId, px, pz) {
+    const canRain = Boolean(RAIN_BIOMES[biomeId]);
+    if (biomeId !== lastWeatherBiomeId) {
+      lastWeatherBiomeId = biomeId;
+      if (!canRain && weatherState !== "CLEAR") {
+        weatherState = "CLEAR";
+        weatherTimer = 18.0;
+      }
+    }
+
+    if (!isMenuMode && !isAppBackgrounded) {
+      weatherTimer -= dt;
+      if (weatherTimer <= 0) {
+        if (!canRain) {
+          weatherState = "CLEAR";
+          weatherTimer = 25.0;
+        } else if (weatherState === "CLEAR") {
+          weatherState = "OVERCAST";
+          weatherTimer = 8.0 + Math.random() * 4.0;
+        } else if (weatherState === "OVERCAST") {
+          weatherState = "RAIN";
+          weatherTimer = 24.0 + Math.random() * 14.0;
+        } else {
+          weatherState = "CLEAR";
+          weatherTimer = 36.0 + Math.random() * 24.0;
+        }
+      }
+    }
+
+    const targetRain = (weatherState === "RAIN" && canRain && !isMenuMode) ? 1.0 : 0.0;
+    const targetOvercast = (weatherState === "RAIN" && canRain && !isMenuMode)
+      ? 1.0
+      : ((weatherState === "OVERCAST" && canRain && !isMenuMode) ? 0.4 : 0.0);
+
+    const rainRate = targetRain > rainIntensity ? 0.35 : 0.28;
+    const overRate = targetOvercast > overcastFactor ? 0.32 : 0.25;
+    rainIntensity += (targetRain - rainIntensity) * Math.min(1, dt * rainRate * 2.2);
+    overcastFactor += (targetOvercast - overcastFactor) * Math.min(1, dt * overRate * 2.2);
+    if (rainIntensity < 0.002 && targetRain === 0) rainIntensity = 0;
+    if (overcastFactor < 0.002 && targetOvercast === 0) overcastFactor = 0;
+
+    if (rainIntensity > 0.01 && !isAppBackgrounded) {
+      const q = typeof state.graphicsQuality === "number" ? state.graphicsQuality : 1;
+      const activeCount = q === 0 ? 85 : RAIN_DROP_COUNT;
+      rainMesh.visible = true;
+      rainMat.opacity = Math.min(0.46, rainIntensity * 0.46);
+      rainGeo.setDrawRange(0, activeCount * 2);
+      for (let ri = 0; ri < activeCount; ri++) {
+        const idx4 = ri * 4;
+        let ry = rainMeta[idx4 + 1] - rainMeta[idx4 + 3] * dt;
+        if (ry < 0) ry = 13.5 + (ry % 1.5);
+        rainMeta[idx4 + 1] = ry;
+        const rx = px + rainMeta[idx4];
+        const rz = pz + rainMeta[idx4 + 2];
+        const idx6 = ri * 6;
+        rainPositions[idx6] = rx;
+        rainPositions[idx6 + 1] = ry;
+        rainPositions[idx6 + 2] = rz;
+        rainPositions[idx6 + 3] = rx - 0.14;
+        rainPositions[idx6 + 4] = ry - 0.68;
+        rainPositions[idx6 + 5] = rz - 0.08;
+      }
+      rainPosAttr.needsUpdate = true;
+    } else {
+      rainMesh.visible = false;
+    }
+  }
+
+  // Exact River, Waterfall & Water-Channel Audio Zones (precomputed once at startup)
+  const RIVER_MAX_HEAR_DIST = 14.0;
+  const RIVER_SEGMENTS = [
+    // Mountains Hexagon Sanctuary River (ox = -27.5, oz = -34.0)
+    { ax: -17.1, az: -38.50, bx: -19.7, bz: -34.00, boost: 0.0 },
+    { ax: -19.7, az: -34.00, bx: -22.3, bz: -29.50, boost: 0.0 },
+    { ax: -22.3, az: -29.50, bx: -18.4, bz: -31.75, boost: 0.0 },
+    // Jungle Hexagon River Outpost (ox = 57.5, oz = -34.0)
+    { ax: 61.4,  az: -36.25, bx: 58.8,  bz: -31.75, boost: 0.0 },
+    { ax: 58.8,  az: -31.75, bx: 64.0,  bz: -31.75, boost: 0.0 }
+  ];
+  const WATER_POINTS = [
+    // Mountains sanctuary pond & watermill
+    { x: -15.8, z: -31.75, bias: 0.0 },
+    { x: -18.4, z: -31.75, bias: 0.0 },
+    // Mountains alpine lake & cliff waterfall
+    { x: 6.4,   z: -39.8,  bias: 1.5 },
+    { x: 9.29,  z: -41.89, bias: 0.0 },
+    // Jungle lagoon & cliff waterfall
+    { x: 27.8,  z: -28.2,  bias: 1.5 },
+    { x: 25.0,  z: -26.1,  bias: 0.0 },
+    // Sky islands celestial pond & waterfall
+    { x: -5.8,  z: -62.0,  bias: 2.0 },
+    { x: -8.4,  z: -60.1,  bias: 0.5 },
+    // Desert oasis, Crystal desert pool, Glacial tarn (gentle edge water)
+    { x: 26.5,  z: 5.4,    bias: 3.5 },
+    { x: 62.0,  z: 5.4,    bias: 4.0 },
+    { x: -61.8, z: -5.8,   bias: 4.0 },
+    // Inter-island arched bridges crossing the lagoon water (heard only on/near bridge)
+    { x: 0,   z: -17, bias: 4.5 },
+    { x: 17,  z: 0,   bias: 4.5 },
+    { x: -17, z: 0,   bias: 4.5 },
+    { x: 0,   z: 17,  bias: 4.5 },
+    { x: 34,  z: -17, bias: 4.5 },
+    { x: 51,  z: 0,   bias: 4.5 },
+    { x: -34, z: 17,  bias: 4.5 },
+    { x: -51, z: 0,   bias: 4.5 },
+    { x: 0,   z: 51,  bias: 4.5 },
+    { x: 34,  z: 17,  bias: 4.5 }
+  ];
+
+  function computeNearestRiverDistance(px, pz) {
+    let best = 999.0;
+    for (let i = 0; i < RIVER_SEGMENTS.length; i++) {
+      const s = RIVER_SEGMENTS[i];
+      const d = distToSegment(px, pz, s.ax, s.az, s.bx, s.bz) + s.boost;
+      if (d < best) best = d;
+    }
+    for (let i = 0; i < WATER_POINTS.length; i++) {
+      const wp = WATER_POINTS[i];
+      const d = Math.hypot(px - wp.x, pz - wp.z) + wp.bias;
+      if (d < best) best = d;
+    }
+    return best;
+  }
+
+  function computeIndoorFactor(px, pz) {
+    let indoor = 0.0;
+    // Underground cave entrances
+    for (let i = 0; i < CAVE_SPECS.length; i++) {
+      const c = CAVE_SPECS[i];
+      const d = Math.hypot(px - c.x, pz - c.z);
+      if (d < 3.6) {
+        const t = Math.max(0, Math.min(1, (3.6 - d) / 1.8));
+        if (t * 0.88 > indoor) indoor = t * 0.88;
+      }
+    }
+    // Trading Post covered pavilion stall
+    const dStall = Math.hypot(px - (SELL_ZONE.x - 1.95), pz - (SELL_ZONE.z + 1.95));
+    if (dStall < 2.2) {
+      const t = Math.max(0, Math.min(1, (2.2 - dStall) / 1.1));
+      if (t * 0.55 > indoor) indoor = t * 0.55;
+    }
+    // Built factory interiors/roof overhangs
+    for (let i = 0; i < BUILDING_DEFS.length; i++) {
+      const bd = BUILDING_DEFS[i];
+      if ((state.buildingLevels[bd.id] || 0) <= 0) continue;
+      const dB = Math.hypot(px - bd.x, pz - bd.z);
+      if (dB < 2.4) {
+        const t = Math.max(0, Math.min(1, (2.4 - dB) / 1.2));
+        if (t * 0.62 > indoor) indoor = t * 0.62;
+      }
+    }
+    return indoor;
+  }
+
+  let lastTelemetryEmitMs = 0;
+  let lastTelemetryBiome = "";
+  let lastTelemetryWeather = "";
+  const telemetryPayload = {
+    biomeId: "forest",
+    weather: "CLEAR",
+    rainIntensity: 0,
+    nearestRiverDist: 999,
+    riverMaxDist: RIVER_MAX_HEAR_DIST,
+    indoorFactor: 0,
+    isMenuMode: true
+  };
+
+  function emitAmbientTelemetry(now, biomeId, px, pz, force) {
+    if (!window.AndroidBridge || !window.AndroidBridge.updateAmbientTelemetry) return;
+    if (!force && biomeId === lastTelemetryBiome && weatherState === lastTelemetryWeather && now - lastTelemetryEmitMs < 85) {
+      return;
+    }
+    lastTelemetryEmitMs = now;
+    lastTelemetryBiome = biomeId;
+    lastTelemetryWeather = weatherState;
+
+    telemetryPayload.biomeId = biomeId;
+    telemetryPayload.weather = weatherState;
+    telemetryPayload.rainIntensity = Math.round(rainIntensity * 1000) / 1000;
+    telemetryPayload.nearestRiverDist = Math.round(computeNearestRiverDistance(px, pz) * 100) / 100;
+    telemetryPayload.riverMaxDist = RIVER_MAX_HEAR_DIST;
+    telemetryPayload.indoorFactor = Math.round(computeIndoorFactor(px, pz) * 1000) / 1000;
+    telemetryPayload.isMenuMode = isMenuMode;
+
+    try {
+      window.AndroidBridge.updateAmbientTelemetry(JSON.stringify(telemetryPayload));
+    } catch (_) {}
+  }
+
   function applyPlayerDamage(amount, label) {
     if (isMenuMode || amount <= 0) return;
     const v = getActiveVehicle();
@@ -5209,9 +5801,19 @@
     }
   }
 
+  let lastFramePresentMs = 0;
+  const menuGoalPos = new THREE.Vector3();
+  const menuGoalLook = new THREE.Vector3();
+
   function tick(now) {
     requestAnimationFrame(tick);
     try {
+      const fpsCap = state.fpsLimit === 30 ? 30 : 60;
+      if (fpsCap === 30 && lastFramePresentMs > 0 && (now - lastFramePresentMs) < 31.5) {
+        return;
+      }
+      lastFramePresentMs = now;
+
       syncViewportSize();
       const dt = Math.min((now - prevTime) / 1000, 0.05);
       prevTime = now;
@@ -5219,15 +5821,28 @@
       const curPx = playerGroup.position.x;
       const curPz = playerGroup.position.z;
       const bNow = currentBiomeAt(curPx, curPz);
-      tickBackgroundMusic(dt, bNow.id);
+      tickWeather(dt, bNow.id, curPx, curPz);
+      const indoorNow = computeIndoorFactor(curPx, curPz);
+      tickBackgroundMusic(dt, bNow.id, indoorNow, rainIntensity);
+      emitAmbientTelemetry(now, bNow.id, curPx, curPz, false);
 
-      // Gentle foliage wind & fireflies & cloud drift
+      // Gentle foliage & forest tree wind, fireflies & cloud drift
       for (let ci = 0; ci < skyClouds.length; ci++) {
         skyClouds[ci].position.x += dt * (0.42 + ci * 0.08);
         if (skyClouds[ci].position.x > 52) skyClouds[ci].position.x = -52;
       }
       for (let gi = 0; gi < grassTufts.length; gi++) {
         grassTufts[gi].rotation.z = Math.sin(now * 0.0024 + gi) * 0.065;
+      }
+      const forestTreeList = nodesByBiome.forest;
+      if (forestTreeList) {
+        for (let ti = 0; ti < forestTreeList.length; ti++) {
+          const tn = forestTreeList[ti];
+          if (tn.kind === "wood" && tn.fallTimer === 0 && tn.respawnTimer === 0 && tn.bounceTimer === 0) {
+            tn.visualRoot.rotation.z = Math.sin(now * 0.0014 + ti * 1.3) * 0.026;
+            tn.visualRoot.rotation.x = Math.cos(now * 0.0011 + ti) * 0.016;
+          }
+        }
       }
       for (let fi = 0; fi < fireflies.length; fi++) {
         const f = fireflies[fi];
@@ -5236,10 +5851,11 @@
         f.mesh.position.z = f.baseZ + Math.cos(now * 0.0012 * f.speed + f.phase) * 0.85;
       }
 
-      // 1. Player Movement (disabled in Home Menu mode)
-      let inputX = isMenuMode ? 0 : moveX;
-      let inputZ = isMenuMode ? 0 : moveZ;
-      if (!isMenuMode && activePointerId === null) {
+      // 1. Player Movement (strictly enabled only when active camera controller is GAMEPLAY)
+      const controlsActive = !isMenuMode && camMode === CAM_MODE_GAMEPLAY;
+      let inputX = controlsActive ? moveX : 0;
+      let inputZ = controlsActive ? moveZ : 0;
+      if (controlsActive && activePointerId === null) {
         let kx = 0, kz = 0;
         if (keysDown["arrowleft"] || keysDown["a"]) kx -= 1;
         if (keysDown["arrowright"] || keysDown["d"]) kx += 1;
@@ -5252,7 +5868,7 @@
         }
       }
 
-      const activeV = (!isMenuMode) ? getActiveVehicle() : null;
+      const activeV = controlsActive ? getActiveVehicle() : null;
       let envSpeedMult = 1.0;
       for (let hi = 0; hi < envHazards.length; hi++) {
         const hz = envHazards[hi];
@@ -5267,7 +5883,7 @@
       const sinYaw = Math.sin(camYaw);
       const worldMoveX = inputX * cosYaw + inputZ * sinYaw;
       const worldMoveZ = -inputX * sinYaw + inputZ * cosYaw;
-      const isMoving = Math.hypot(worldMoveX, worldMoveZ) > 0.05;
+      const isMoving = controlsActive && Math.hypot(worldMoveX, worldMoveZ) > 0.05;
       if (playerAuraRing.visible) playerAuraRing.rotation.z += dt * 1.8;
 
       if (activeV && explorerDish) {
@@ -5319,29 +5935,58 @@
           playerBodyPivot.rotation.x *= 0.85;
           playerBodyPivot.position.y = Math.sin(now * 0.003) * 0.024;
         }
-        if (isMenuMode) {
-          playerGroup.rotation.y = Math.sin(now * 0.0007) * 0.36;
+        if (camMode === CAM_MODE_MENU) {
+          playerGroup.rotation.y = Math.sin(menuShowcasePhase * 1.55) * 0.28;
         }
       }
 
-      // 2. Advanced Smooth Third-Person Camera (~70° FOV, Orbit, Zoom & Anti-Clipping)
+      // 2. Single Active Camera Controller (MENU | TRANSITION_TO_GAME | GAMEPLAY)
       const px = playerGroup.position.x;
       const pz = playerGroup.position.z;
       updateWorldStreaming(px, pz);
-      const targetFov = isMenuMode ? MENU_FOV : GAMEPLAY_FOV;
-      if (Math.abs(targetFov - camera.fov) > 0.04) {
-        camera.fov += (targetFov - camera.fov) * (1 - Math.exp(-6.0 * dt));
-        camera.updateProjectionMatrix();
-      }
 
-      if (isMenuMode) {
-        const camLerp = 1 - Math.exp(-5.5 * dt);
-        const orbitAng = Math.sin(now * 0.00035) * 0.42;
-        camera.position.x += (px + Math.sin(orbitAng) * 2.15 - camera.position.x) * camLerp;
-        camera.position.y += (1.48 - camera.position.y) * camLerp;
-        camera.position.z += (pz + Math.cos(orbitAng) * 2.95 - camera.position.z) * camLerp;
-        camera.lookAt(px, 0.86, pz - 0.18);
+      if (camMode === CAM_MODE_MENU) {
+        menuShowcasePhase += dt * 0.42;
+        computeMenuCameraPose(menuShowcasePhase, px, pz, menuGoalPos, menuGoalLook);
+        const menuLerp = 1 - Math.exp(-4.5 * dt);
+        camera.position.lerp(menuGoalPos, menuLerp);
+        currentCamLookAt.lerp(menuGoalLook, menuLerp);
+        if (Math.abs(MENU_FOV - camera.fov) > 0.03) {
+          camera.fov += (MENU_FOV - camera.fov) * (1 - Math.exp(-5.0 * dt));
+          camera.updateProjectionMatrix();
+        }
+        camera.lookAt(currentCamLookAt);
+      } else if (camMode === CAM_MODE_TRANSITION) {
+        transElapsed = Math.min(TRANS_DURATION, transElapsed + dt);
+        const u = transElapsed / TRANS_DURATION;
+        const ease = u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
+
+        camera.position.lerpVectors(transStartPos, transGoalPos, ease);
+        currentCamLookAt.lerpVectors(transStartLook, camLookTarget, ease);
+        const fovNow = transStartFov + (GAMEPLAY_FOV - transStartFov) * ease;
+        if (Math.abs(fovNow - camera.fov) > 0.01) {
+          camera.fov = fovNow;
+          camera.updateProjectionMatrix();
+        }
+        let yawDiff = 0 - transStartPlayerYaw;
+        while (yawDiff > Math.PI) yawDiff -= Math.PI * 2;
+        while (yawDiff < -Math.PI) yawDiff += Math.PI * 2;
+        playerGroup.rotation.y = transStartPlayerYaw + yawDiff * ease;
+        camera.lookAt(currentCamLookAt);
+
+        if (transElapsed >= TRANS_DURATION) {
+          camMode = CAM_MODE_GAMEPLAY;
+          camera.position.copy(transGoalPos);
+          currentCamLookAt.copy(camLookTarget);
+          camera.fov = GAMEPLAY_FOV;
+          camera.updateProjectionMatrix();
+          camera.lookAt(currentCamLookAt);
+        }
       } else {
+        if (Math.abs(GAMEPLAY_FOV - camera.fov) > 0.04) {
+          camera.fov += (GAMEPLAY_FOV - camera.fov) * (1 - Math.exp(-8.0 * dt));
+          camera.updateProjectionMatrix();
+        }
         const followLerp = 1 - Math.exp(-10.0 * dt);
         const orbitLerp = 1 - Math.exp(-11.0 * dt);
         const zoomLerp = 1 - Math.exp(-8.5 * dt);
@@ -5372,7 +6017,8 @@
         const finalY = Math.max(floorClearY, camLookTarget.y + dirY * camSafeDist);
 
         camera.position.set(finalX, finalY, finalZ);
-        camera.lookAt(camLookTarget);
+        currentCamLookAt.copy(camLookTarget);
+        camera.lookAt(currentCamLookAt);
       }
 
       sunLight.position.set(px + 16, 26, pz + 14);
@@ -5408,6 +6054,15 @@
         sunLight.color.lerp(linCol(atmo.sunCol), atmoRate);
         sunLight.intensity += (atmo.sunInt - sunLight.intensity) * atmoRate;
         window.BiomeEnvBuilder.updateAnimations(now, dt, biomeChunkGroups);
+      }
+      if (overcastFactor > 0.002) {
+        const skyDim = 1 - overcastFactor * 0.28;
+        skyUniforms.uTop.value.multiplyScalar(skyDim);
+        skyUniforms.uHorizon.value.multiplyScalar(skyDim);
+        skyUniforms.uBottom.value.multiplyScalar(skyDim);
+        scene.fog.color.multiplyScalar(skyDim);
+        scene.fog.density *= (1 + overcastFactor * 0.45);
+        sunLight.intensity *= (1 - overcastFactor * 0.32);
       }
       if (window.HexagonDistrictBuilder) {
         window.HexagonDistrictBuilder.updateAnimations(now, dt, biomeChunkGroups);
@@ -6049,7 +6704,8 @@
   refreshCharacterVisuals();
   refreshWorldState();
   syncViewportSize();
-  window.setMenuMode(true);
+  startMenuShowcaseCamera(true);
+  emitAmbientTelemetry(performance.now(), "forest", 0, 2, true);
   renderer.render(scene, camera);
   document.getElementById("loading-overlay").classList.add("hidden");
   if (window.AndroidBridge && window.AndroidBridge.onEngineReady) {

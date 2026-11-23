@@ -60,6 +60,13 @@ private class WildcraftJsBridge(
             viewModel.onBiomeChanged(biomeId)
         }
     }
+
+    @JavascriptInterface
+    fun updateAmbientTelemetry(json: String) {
+        mainHandler.post {
+            viewModel.updateAmbientTelemetry(json)
+        }
+    }
 }
 
 @SuppressLint("SetJavaScriptEnabled")

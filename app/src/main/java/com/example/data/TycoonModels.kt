@@ -1049,13 +1049,48 @@ data class TycoonSaveState(
     val insectsDefeated: Int = 0,
     val playerHp: Int = 100,
     val isMuted: Boolean = false,
+    val masterVolume: Float = 1.0f,
+    val ambientVolume: Float = 0.70f,
+    val weatherVolume: Float = 0.75f,
+    val waterVolume: Float = 0.80f,
     val sfxVolume: Float = 0.85f,
     val musicVolume: Float = 0.45f,
     val graphicsQuality: Int = 1,
     val hapticsEnabled: Boolean = true,
+    val shadowQuality: Int = 1,
+    val cameraSensitivity: Float = 1.0f,
+    val cameraDistance: Float = 12.2f,
+    val fpsLimit: Int = 60,
+    val languageCode: String = "en",
+    val playerPosX: Double = 0.0,
+    val playerPosZ: Double = 2.0,
+    val lastBiomeId: String = "forest",
+    val playtimeSeconds: Long = 0L,
     val lastSavedEpochMs: Long = 0L,
     val settlement: SettlementState = SettlementState()
 ) {
+    val hasSavedProgress: Boolean
+        get() = lifetimeEarned > 0L ||
+            coins > 0L ||
+            xp > 0L ||
+            playtimeSeconds >= 5L ||
+            axeLevel > 1 ||
+            pickaxeLevel > 1 ||
+            backpackLevel > 1 ||
+            unlockedBiomes.size > 1 ||
+            buildingLevels.isNotEmpty() ||
+            machineLevels.isNotEmpty() ||
+            gatheredTotals.values.sum() > 0
+
+    val totalBuildingsBuilt: Int
+        get() = buildingLevels.count { it.value > 0 } +
+            machineLevels.count { it.value > 0 } +
+            settlement.housingUnits.size +
+            settlement.facilities.count { it.level > 0 }
+
+    val totalResourcesCollected: Long
+        get() = gatheredTotals.values.sumOf { it.toLong() }
+
     val playerMaxHp: Int
         get() = 100 + (backpackLevel - 1) * 10 + (axeLevel - 1) * 5
 

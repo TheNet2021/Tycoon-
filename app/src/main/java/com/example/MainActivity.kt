@@ -16,12 +16,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.UpgradeType
 import com.example.ui.components.GameHudOverlay
 import com.example.ui.components.HomeMenuOverlay
+import com.example.ui.components.LoadingExpeditionOverlay
 import com.example.ui.components.ThreeJsGameView
 import com.example.ui.sheets.AdvisorChatSheet
 import com.example.ui.sheets.BackpackSheet
@@ -30,6 +32,7 @@ import com.example.ui.sheets.BusinessSheet
 import com.example.ui.sheets.ConceptStudioSheet
 import com.example.ui.sheets.MachinerySheet
 import com.example.ui.sheets.MarketplaceSheet
+import com.example.ui.sheets.ProfileSheet
 import com.example.ui.sheets.QuestBoardSheet
 import com.example.ui.sheets.SettingsSheet
 import com.example.ui.sheets.SettlementSheet
@@ -37,6 +40,8 @@ import com.example.ui.sheets.UpgradeShopSheet
 import com.example.ui.theme.WildcraftTheme
 import com.example.viewmodel.AiViewModel
 import com.example.viewmodel.GameViewModel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private enum class ActiveSheet {
     NONE,
@@ -47,6 +52,7 @@ private enum class ActiveSheet {
     SETTLEMENT,
     BACKPACK,
     BIOMES,
+    PROFILE,
     QUESTS,
     SETTINGS,
     ADVISOR,
@@ -67,6 +73,8 @@ class MainActivity : ComponentActivity() {
             WildcraftTheme {
                 val gameState by gameViewModel.gameState.collectAsStateWithLifecycle()
                 val activeBiome by gameViewModel.activeBiome.collectAsStateWithLifecycle()
+                val saveSlots by gameViewModel.saveSlots.collectAsStateWithLifecycle()
+                val activeSlotIndex by gameViewModel.activeSlotIndex.collectAsStateWithLifecycle()
                 val isEngineReady by gameViewModel.isEngineReady.collectAsStateWithLifecycle()
                 val offlineEarnings by gameViewModel.offlineEarningsBanner.collectAsStateWithLifecycle()
                 val chatState by aiViewModel.chatState.collectAsStateWithLifecycle()
@@ -74,17 +82,22 @@ class MainActivity : ComponentActivity() {
                 val selectedSize by aiViewModel.selectedImageSize.collectAsStateWithLifecycle()
                 val studioState by aiViewModel.studioState.collectAsStateWithLifecycle()
 
+                val coroutineScope = rememberCoroutineScope()
                 var isInHomeMenu by remember { mutableStateOf(true) }
+                var isLoadingExpedition by remember { mutableStateOf(false) }
                 var activeSheet by remember { mutableStateOf(ActiveSheet.NONE) }
 
-                LaunchedEffect(isEngineReady, isInHomeMenu) {
-                    if (isEngineReady) {
-                        gameViewModel.setMenuMode(isInHomeMenu)
+                LaunchedEffect(isEngineReady) {
+                    if (isEngineReady && isInHomeMenu) {
+                        gameViewModel.setMenuMode(true)
                     }
                 }
 
-                BackHandler(enabled = !isInHomeMenu && activeSheet == ActiveSheet.NONE) {
+                BackHandler(
+                    enabled = !isInHomeMenu && !isLoadingExpedition && activeSheet == ActiveSheet.NONE
+                ) {
                     isInHomeMenu = true
+                    gameViewModel.setMenuMode(true)
                 }
 
                 Box(modifier = Modifier.fillMaxSize()) {
@@ -95,7 +108,7 @@ class MainActivity : ComponentActivity() {
                     )
 
                     AnimatedVisibility(
-                        visible = !isInHomeMenu,
+                        visible = !isInHomeMenu && !isLoadingExpedition,
                         enter = fadeIn(),
                         exit = fadeOut()
                     ) {
@@ -118,26 +131,59 @@ class MainActivity : ComponentActivity() {
                     }
 
                     AnimatedVisibility(
-                        visible = isInHomeMenu,
+                        visible = isInHomeMenu && !isLoadingExpedition,
                         enter = fadeIn(),
                         exit = fadeOut()
                     ) {
                         HomeMenuOverlay(
                             state = gameState,
                             activeBiome = activeBiome,
-                            onPlay = {
-                                isInHomeMenu = false
-                                gameViewModel.setMenuMode(false)
+                            saveSlots = saveSlots,
+                            activeSlotIndex = activeSlotIndex,
+                            onContinue = {
+                                if (!isLoadingExpedition) {
+                                    isLoadingExpedition = true
+                                    isInHomeMenu = false
+                                    gameViewModel.beginContinueExpedition()
+                                    coroutineScope.launch {
+                                        delay(650L)
+                                        isLoadingExpedition = false
+                                    }
+                                }
                             },
-                            onOpenUpgrades = { activeSheet = ActiveSheet.UPGRADES },
-                            onOpenMachinery = { activeSheet = ActiveSheet.MACHINERY },
-                            onOpenMarket = { activeSheet = ActiveSheet.MARKET },
-                            onOpenInventory = { activeSheet = ActiveSheet.BACKPACK },
+                            onNewGame = {
+                                if (!isLoadingExpedition) {
+                                    isLoadingExpedition = true
+                                    isInHomeMenu = false
+                                    if (gameState.hasSavedProgress) {
+                                        gameViewModel.resetProgress()
+                                    }
+                                    gameViewModel.setMenuMode(false)
+                                    coroutineScope.launch {
+                                        delay(520L)
+                                        isLoadingExpedition = false
+                                    }
+                                }
+                            },
                             onOpenWorldMap = { activeSheet = ActiveSheet.BIOMES },
-                            onOpenBusiness = { activeSheet = ActiveSheet.BUSINESS },
-                            onOpenQuests = { activeSheet = ActiveSheet.QUESTS },
+                            onOpenProfile = { activeSheet = ActiveSheet.PROFILE },
+                            onOpenAchievements = { activeSheet = ActiveSheet.QUESTS },
+                            onOpenMarket = { activeSheet = ActiveSheet.MARKET },
                             onOpenSettings = { activeSheet = ActiveSheet.SETTINGS },
-                            onOpenSettlement = { activeSheet = ActiveSheet.SETTLEMENT }
+                            onSelectSaveSlot = gameViewModel::selectSaveSlot,
+                            onToggleMute = gameViewModel::toggleMute
+                        )
+                    }
+
+                    AnimatedVisibility(
+                        visible = isLoadingExpedition,
+                        enter = fadeIn(),
+                        exit = fadeOut()
+                    ) {
+                        LoadingExpeditionOverlay(
+                            biome = activeBiome,
+                            playerLevel = gameState.playerLevel,
+                            languageCode = gameState.languageCode
                         )
                     }
                 }
@@ -208,10 +254,17 @@ class MainActivity : ComponentActivity() {
                         onDismiss = { activeSheet = ActiveSheet.NONE },
                         onUnlockBiome = gameViewModel::unlockBiome,
                         onTeleportBiome = { biome ->
+                            activeSheet = ActiveSheet.NONE
                             isInHomeMenu = false
                             gameViewModel.setMenuMode(false)
                             gameViewModel.teleportToBiome(biome)
                         }
+                    )
+                    ActiveSheet.PROFILE -> ProfileSheet(
+                        state = gameState,
+                        activeSlotIndex = activeSlotIndex,
+                        onOpenAchievements = { activeSheet = ActiveSheet.QUESTS },
+                        onDismiss = { activeSheet = ActiveSheet.NONE }
                     )
                     ActiveSheet.QUESTS -> QuestBoardSheet(
                         state = gameState,
@@ -222,11 +275,22 @@ class MainActivity : ComponentActivity() {
                         state = gameState,
                         showReturnToHome = !isInHomeMenu,
                         onToggleMute = gameViewModel::toggleMute,
+                        onMasterVolumeChange = gameViewModel::setMasterVolume,
+                        onAmbientVolumeChange = gameViewModel::setAmbientVolume,
+                        onWeatherVolumeChange = gameViewModel::setWeatherVolume,
+                        onWaterVolumeChange = gameViewModel::setWaterVolume,
                         onSfxVolumeChange = gameViewModel::setSfxVolume,
                         onMusicVolumeChange = gameViewModel::setMusicVolume,
                         onGraphicsQualityChange = gameViewModel::setGraphicsQuality,
+                        onShadowQualityChange = gameViewModel::setShadowQuality,
+                        onCameraSensitivityChange = gameViewModel::setCameraSensitivity,
+                        onCameraDistanceChange = gameViewModel::setCameraDistance,
+                        onFpsLimitChange = gameViewModel::setFpsLimit,
+                        onLanguageChange = gameViewModel::setLanguageCode,
+                        onResetSettings = gameViewModel::resetSettingsToDefault,
                         onToggleHaptics = gameViewModel::toggleHaptics,
                         onReturnToHome = {
+                            isLoadingExpedition = false
                             isInHomeMenu = true
                             gameViewModel.setMenuMode(true)
                         },
@@ -261,9 +325,19 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        gameWebView?.onResume()
+        gameWebView?.resumeTimers()
+        gameViewModel.setAppBackgrounded(false)
+    }
+
     override fun onPause() {
-        super.onPause()
+        gameViewModel.setAppBackgrounded(true)
         gameWebView?.evaluateJavascript("window.flushSaveToAndroid && window.flushSaveToAndroid();", null)
+        gameWebView?.onPause()
+        gameWebView?.pauseTimers()
         gameViewModel.flushSave()
+        super.onPause()
     }
 }

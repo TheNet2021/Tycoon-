@@ -9,6 +9,10 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.audio.AmbientAudioEngine
+import com.example.audio.AmbientTelemetry
+import com.example.audio.AudioMixSettings
+import com.example.audio.WeatherType
 import com.example.data.BiomeType
 import com.example.data.BuildingType
 import com.example.data.BuyerCompany
@@ -19,6 +23,7 @@ import com.example.data.GameRepository
 import com.example.data.HousingType
 import com.example.data.MachineType
 import com.example.data.ResourceUpgradeType
+import com.example.data.SaveSlotSummary
 import com.example.data.SettlementActionOutcome
 import com.example.data.SettlementEngine
 import com.example.data.SettlementFacilityType
@@ -45,9 +50,16 @@ import kotlin.math.sin
 class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = GameRepository(application.applicationContext)
+    private val ambientAudioEngine = AmbientAudioEngine(application.applicationContext)
 
     private val _gameState = MutableStateFlow(TycoonSaveState())
     val gameState: StateFlow<TycoonSaveState> = _gameState.asStateFlow()
+
+    private val _saveSlots = MutableStateFlow<List<SaveSlotSummary>>(emptyList())
+    val saveSlots: StateFlow<List<SaveSlotSummary>> = _saveSlots.asStateFlow()
+
+    private val _activeSlotIndex = MutableStateFlow(0)
+    val activeSlotIndex: StateFlow<Int> = _activeSlotIndex.asStateFlow()
 
     private val _isHydrated = MutableStateFlow(false)
     val isHydrated: StateFlow<Boolean> = _isHydrated.asStateFlow()
@@ -61,6 +73,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val _activeBiome = MutableStateFlow(BiomeType.FOREST)
     val activeBiome: StateFlow<BiomeType> = _activeBiome.asStateFlow()
 
+    private val _ambientTelemetry = MutableStateFlow(AmbientTelemetry())
+    val ambientTelemetry: StateFlow<AmbientTelemetry> = _ambientTelemetry.asStateFlow()
+
+    val hasNativeNatureAsset: Boolean
+        get() = ambientAudioEngine.hasNativeNatureAsset
+
     private val _jsCommands = MutableSharedFlow<String>(extraBufferCapacity = 32)
     val jsCommands: SharedFlow<String> = _jsCommands.asSharedFlow()
 
@@ -69,12 +87,20 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val machineAccumulators = mutableMapOf<String, Double>()
     private var powerCostAccum: Double = 0.0
     private var marketSeedOffset: Long = 1L
+    private var isInGameplaySession = false
+    private var isBackgrounded = false
+    private var lastMenuModeDispatched: Boolean? = null
 
     init {
         viewModelScope.launch {
-            val (loaded, offlineEarned) = repository.loadState()
+            val activeSlot = repository.getActiveSlotIndex()
+            _activeSlotIndex.value = activeSlot
+            val (loaded, offlineEarned) = repository.loadSlot(activeSlot)
             val initialized = ensureMarketAndContracts(loaded)
             _gameState.value = initialized
+            BiomeType.fromId(initialized.lastBiomeId)?.let { _activeBiome.value = it }
+            _saveSlots.value = repository.listSaveSlots()
+            syncAudioSettings(initialized)
             _isHydrated.value = true
             if (offlineEarned > 0L) {
                 _offlineEarningsBanner.value = offlineEarned
@@ -94,6 +120,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 val current = _gameState.value
                 val now = System.currentTimeMillis()
                 var updated = tickMachineryAndPower(current)
+                if (isInGameplaySession && !isBackgrounded) {
+                    updated = updated.copy(playtimeSeconds = updated.playtimeSeconds + 1L)
+                }
                 val (settlementTicked, settlementBanner) = SettlementEngine.tick(updated, now)
                 updated = settlementTicked
                 if (now - updated.lastMarketTickEpochMs >= 45_000L || updated.marketMultipliers.isEmpty()) {
@@ -262,14 +291,52 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             claimedQuestIds = current.claimedQuestIds,
             uniqueItems = current.uniqueItems,
             isMuted = current.isMuted,
+            masterVolume = current.masterVolume,
+            ambientVolume = current.ambientVolume,
+            weatherVolume = current.weatherVolume,
+            waterVolume = current.waterVolume,
             sfxVolume = current.sfxVolume,
             musicVolume = current.musicVolume,
             graphicsQuality = current.graphicsQuality,
             hapticsEnabled = current.hapticsEnabled,
+            shadowQuality = current.shadowQuality,
+            cameraSensitivity = current.cameraSensitivity,
+            cameraDistance = current.cameraDistance,
+            fpsLimit = current.fpsLimit,
+            languageCode = current.languageCode,
+            playerPosX = parsed.playerPosX,
+            playerPosZ = parsed.playerPosZ,
+            lastBiomeId = parsed.lastBiomeId.ifBlank { current.lastBiomeId },
+            playtimeSeconds = current.playtimeSeconds,
             settlement = current.settlement
         )
         _gameState.value = merged
         scheduleDebouncedSave()
+    }
+
+    fun updateAmbientTelemetry(json: String) {
+        try {
+            val obj = JSONObject(json)
+            val telemetry = AmbientTelemetry(
+                biomeId = obj.optString("biomeId", _activeBiome.value.id),
+                weather = WeatherType.fromWire(obj.optString("weather", "CLEAR")),
+                rainIntensity = obj.optDouble("rainIntensity", 0.0).toFloat().coerceIn(0f, 1f),
+                nearestRiverDist = obj.optDouble("nearestRiverDist", 999.0).toFloat().coerceAtLeast(0f),
+                riverMaxDist = obj.optDouble("riverMaxDist", 14.0).toFloat().coerceAtLeast(4f),
+                indoorFactor = obj.optDouble("indoorFactor", 0.0).toFloat().coerceIn(0f, 1f),
+                isMenuMode = obj.optBoolean("isMenuMode", false)
+            )
+            _ambientTelemetry.value = telemetry
+            ambientAudioEngine.updateTelemetry(telemetry)
+        } catch (_: Exception) {
+            // Ignore malformed telemetry packets
+        }
+    }
+
+    fun setAppBackgrounded(backgrounded: Boolean) {
+        isBackgrounded = backgrounded
+        ambientAudioEngine.setBackgrounded(backgrounded)
+        _jsCommands.tryEmit("window.setAppBackgrounded && window.setAppBackgrounded($backgrounded);")
     }
 
     fun purchaseUpgrade(type: UpgradeType): Boolean {
@@ -787,15 +854,117 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setMenuMode(inMenu: Boolean) {
-        _jsCommands.tryEmit("window.setMenuMode && window.setMenuMode($inMenu);")
+        isInGameplaySession = !inMenu
+        if (lastMenuModeDispatched == inMenu) return
+        lastMenuModeDispatched = inMenu
+        if (inMenu) {
+            _jsCommands.tryEmit("window.setMenuMode && window.setMenuMode(true);")
+        } else {
+            val s = _gameState.value
+            val safeBiome = JSONObject.quote(s.lastBiomeId)
+            _jsCommands.tryEmit("window.enterGameplay && window.enterGameplay(false, ${s.playerPosX}, ${s.playerPosZ}, $safeBiome);")
+        }
+    }
+
+    fun beginContinueExpedition() {
+        isInGameplaySession = true
+        lastMenuModeDispatched = false
+        val s = _gameState.value
+        val safeBiome = JSONObject.quote(s.lastBiomeId)
+        _jsCommands.tryEmit("window.enterGameplay && window.enterGameplay(true, ${s.playerPosX}, ${s.playerPosZ}, $safeBiome);")
+    }
+
+    fun selectSaveSlot(slotIndex: Int) {
+        val clamped = slotIndex.coerceIn(0, 2)
+        viewModelScope.launch {
+            repository.saveSlot(_activeSlotIndex.value, _gameState.value)
+            repository.setActiveSlotIndex(clamped)
+            _activeSlotIndex.value = clamped
+            val (loaded, offlineEarned) = repository.loadSlot(clamped)
+            val currentSettings = _gameState.value
+            val initialized = ensureMarketAndContracts(loaded).let { slotState ->
+                if (!slotState.hasSavedProgress && slotState.lastSavedEpochMs == 0L) {
+                    slotState.copy(
+                        isMuted = currentSettings.isMuted,
+                        masterVolume = currentSettings.masterVolume,
+                        ambientVolume = currentSettings.ambientVolume,
+                        weatherVolume = currentSettings.weatherVolume,
+                        waterVolume = currentSettings.waterVolume,
+                        sfxVolume = currentSettings.sfxVolume,
+                        musicVolume = currentSettings.musicVolume,
+                        graphicsQuality = currentSettings.graphicsQuality,
+                        shadowQuality = currentSettings.shadowQuality,
+                        cameraSensitivity = currentSettings.cameraSensitivity,
+                        cameraDistance = currentSettings.cameraDistance,
+                        fpsLimit = currentSettings.fpsLimit,
+                        languageCode = currentSettings.languageCode,
+                        hapticsEnabled = currentSettings.hapticsEnabled
+                    )
+                } else {
+                    slotState
+                }
+            }
+            lastKotlinMutationElapsedMs = SystemClock.elapsedRealtime()
+            _gameState.value = initialized
+            _activeBiome.value = BiomeType.fromId(initialized.lastBiomeId) ?: BiomeType.FOREST
+            _offlineEarningsBanner.value = if (offlineEarned > 0L) offlineEarned else null
+            syncAudioSettings(initialized)
+            pushStateToEngine(initialized)
+            _saveSlots.value = repository.listSaveSlots()
+        }
+    }
+
+    fun refreshSaveSlots() {
+        viewModelScope.launch {
+            _saveSlots.value = repository.listSaveSlots()
+        }
     }
 
     fun toggleMute() {
         val updated = _gameState.value.copy(isMuted = !_gameState.value.isMuted)
         lastKotlinMutationElapsedMs = SystemClock.elapsedRealtime()
         _gameState.value = updated
+        syncAudioSettings(updated)
         pushStateToEngine(updated)
         scheduleImmediateSave(updated)
+    }
+
+    fun setMasterVolume(volume: Float) {
+        val clamped = volume.coerceIn(0f, 1f)
+        val updated = _gameState.value.copy(masterVolume = clamped)
+        lastKotlinMutationElapsedMs = SystemClock.elapsedRealtime()
+        _gameState.value = updated
+        syncAudioSettings(updated)
+        pushStateToEngine(updated)
+        scheduleDebouncedSave()
+    }
+
+    fun setAmbientVolume(volume: Float) {
+        val clamped = volume.coerceIn(0f, 1f)
+        val updated = _gameState.value.copy(ambientVolume = clamped)
+        lastKotlinMutationElapsedMs = SystemClock.elapsedRealtime()
+        _gameState.value = updated
+        syncAudioSettings(updated)
+        pushStateToEngine(updated)
+        scheduleDebouncedSave()
+    }
+
+    fun setWeatherVolume(volume: Float) {
+        val clamped = volume.coerceIn(0f, 1f)
+        val updated = _gameState.value.copy(weatherVolume = clamped)
+        lastKotlinMutationElapsedMs = SystemClock.elapsedRealtime()
+        _gameState.value = updated
+        syncAudioSettings(updated)
+        scheduleDebouncedSave()
+    }
+
+    fun setWaterVolume(volume: Float) {
+        val clamped = volume.coerceIn(0f, 1f)
+        val updated = _gameState.value.copy(waterVolume = clamped)
+        lastKotlinMutationElapsedMs = SystemClock.elapsedRealtime()
+        _gameState.value = updated
+        syncAudioSettings(updated)
+        scheduleDebouncedSave()
     }
 
     fun setSfxVolume(volume: Float) {
@@ -816,12 +985,68 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         scheduleDebouncedSave()
     }
 
+    private fun syncAudioSettings(state: TycoonSaveState) {
+        ambientAudioEngine.updateSettings(
+            AudioMixSettings(
+                isMuted = state.isMuted,
+                masterVolume = state.masterVolume,
+                ambientVolume = state.ambientVolume,
+                weatherVolume = state.weatherVolume,
+                waterVolume = state.waterVolume
+            )
+        )
+    }
+
     fun setGraphicsQuality(quality: Int) {
         val clamped = quality.coerceIn(0, 2)
         val updated = _gameState.value.copy(graphicsQuality = clamped)
         lastKotlinMutationElapsedMs = SystemClock.elapsedRealtime()
         _gameState.value = updated
         pushStateToEngine(updated)
+        scheduleImmediateSave(updated)
+    }
+
+    fun setShadowQuality(quality: Int) {
+        val clamped = quality.coerceIn(0, 2)
+        val updated = _gameState.value.copy(shadowQuality = clamped)
+        lastKotlinMutationElapsedMs = SystemClock.elapsedRealtime()
+        _gameState.value = updated
+        pushStateToEngine(updated)
+        scheduleImmediateSave(updated)
+    }
+
+    fun setCameraSensitivity(sensitivity: Float) {
+        val clamped = sensitivity.coerceIn(0.5f, 2.0f)
+        val updated = _gameState.value.copy(cameraSensitivity = clamped)
+        lastKotlinMutationElapsedMs = SystemClock.elapsedRealtime()
+        _gameState.value = updated
+        pushStateToEngine(updated)
+        scheduleDebouncedSave()
+    }
+
+    fun setCameraDistance(distance: Float) {
+        val clamped = distance.coerceIn(8.0f, 18.0f)
+        val updated = _gameState.value.copy(cameraDistance = clamped)
+        lastKotlinMutationElapsedMs = SystemClock.elapsedRealtime()
+        _gameState.value = updated
+        pushStateToEngine(updated)
+        scheduleDebouncedSave()
+    }
+
+    fun setFpsLimit(fps: Int) {
+        val normalized = if (fps <= 35) 30 else 60
+        val updated = _gameState.value.copy(fpsLimit = normalized)
+        lastKotlinMutationElapsedMs = SystemClock.elapsedRealtime()
+        _gameState.value = updated
+        pushStateToEngine(updated)
+        scheduleImmediateSave(updated)
+    }
+
+    fun setLanguageCode(code: String) {
+        val clean = code.ifBlank { "en" }
+        val updated = _gameState.value.copy(languageCode = clean)
+        lastKotlinMutationElapsedMs = SystemClock.elapsedRealtime()
+        _gameState.value = updated
         scheduleImmediateSave(updated)
     }
 
@@ -832,26 +1057,71 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         scheduleImmediateSave(updated)
     }
 
+    fun resetSettingsToDefault() {
+        val current = _gameState.value
+        val updated = current.copy(
+            isMuted = false,
+            masterVolume = 1.0f,
+            ambientVolume = 0.70f,
+            weatherVolume = 0.75f,
+            waterVolume = 0.80f,
+            sfxVolume = 0.85f,
+            musicVolume = 0.45f,
+            graphicsQuality = 1,
+            shadowQuality = 1,
+            cameraSensitivity = 1.0f,
+            cameraDistance = 12.2f,
+            fpsLimit = 60,
+            languageCode = "en",
+            hapticsEnabled = true
+        )
+        lastKotlinMutationElapsedMs = SystemClock.elapsedRealtime()
+        _gameState.value = updated
+        syncAudioSettings(updated)
+        pushStateToEngine(updated)
+        scheduleImmediateSave(updated)
+    }
+
     fun resetProgress() {
         viewModelScope.launch {
-            repository.clearState()
+            val slot = _activeSlotIndex.value
+            repository.clearSlot(slot)
             lastKotlinMutationElapsedMs = SystemClock.elapsedRealtime()
-            val fresh = TycoonSaveState(
-                isMuted = _gameState.value.isMuted,
-                sfxVolume = _gameState.value.sfxVolume,
-                musicVolume = _gameState.value.musicVolume,
-                graphicsQuality = _gameState.value.graphicsQuality,
-                hapticsEnabled = _gameState.value.hapticsEnabled
+            val cur = _gameState.value
+            val fresh = ensureMarketAndContracts(
+                TycoonSaveState(
+                    isMuted = cur.isMuted,
+                    masterVolume = cur.masterVolume,
+                    ambientVolume = cur.ambientVolume,
+                    weatherVolume = cur.weatherVolume,
+                    waterVolume = cur.waterVolume,
+                    sfxVolume = cur.sfxVolume,
+                    musicVolume = cur.musicVolume,
+                    graphicsQuality = cur.graphicsQuality,
+                    shadowQuality = cur.shadowQuality,
+                    cameraSensitivity = cur.cameraSensitivity,
+                    cameraDistance = cur.cameraDistance,
+                    fpsLimit = cur.fpsLimit,
+                    languageCode = cur.languageCode,
+                    hapticsEnabled = cur.hapticsEnabled
+                )
             )
             _gameState.value = fresh
+            _activeBiome.value = BiomeType.FOREST
+            _offlineEarningsBanner.value = null
+            syncAudioSettings(fresh)
             pushStateToEngine(fresh)
             _jsCommands.tryEmit("window.resetWorld && window.resetWorld();")
+            repository.saveSlot(slot, fresh)
+            _saveSlots.value = repository.listSaveSlots()
         }
     }
 
     fun flushSave() {
         viewModelScope.launch {
-            repository.saveState(_gameState.value)
+            val slot = _activeSlotIndex.value
+            repository.saveSlot(slot, _gameState.value)
+            _saveSlots.value = repository.listSaveSlots()
         }
     }
 
@@ -867,22 +1137,33 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun pushStateToEngine(state: TycoonSaveState) {
-        val json = repository.serialize(state)
+        val obj = JSONObject(repository.serialize(state))
+        obj.put("nativeHasNatureAudio", ambientAudioEngine.hasNativeNatureAsset)
+        val json = obj.toString()
         _jsCommands.tryEmit("window.applyGameState && window.applyGameState($json);")
+    }
+
+    override fun onCleared() {
+        ambientAudioEngine.release()
+        super.onCleared()
     }
 
     private fun scheduleDebouncedSave() {
         debouncedSaveJob?.cancel()
         debouncedSaveJob = viewModelScope.launch {
             delay(1500L)
-            repository.saveState(_gameState.value)
+            val slot = _activeSlotIndex.value
+            repository.saveSlot(slot, _gameState.value)
+            _saveSlots.value = repository.listSaveSlots()
         }
     }
 
     private fun scheduleImmediateSave(state: TycoonSaveState) {
         debouncedSaveJob?.cancel()
         viewModelScope.launch {
-            repository.saveState(state)
+            val slot = _activeSlotIndex.value
+            repository.saveSlot(slot, state)
+            _saveSlots.value = repository.listSaveSlots()
         }
     }
 

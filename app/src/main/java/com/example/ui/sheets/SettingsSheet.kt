@@ -4,10 +4,11 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -19,13 +20,21 @@ import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Brush
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CloudDone
+import androidx.compose.material.icons.filled.Forest
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Vibration
+import androidx.compose.material.icons.filled.WaterDrop
+import androidx.compose.material.icons.filled.Waves
+import androidx.compose.material.icons.filled.WbSunny
+import androidx.compose.material.icons.filled.ZoomOutMap
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -71,16 +80,30 @@ import com.example.ui.theme.PanelBorder
 import com.example.ui.theme.PanelCard
 import com.example.ui.theme.PanelDark
 import com.example.ui.theme.PanelElevated
+import com.example.ui.theme.SupportedLanguages
+import com.example.ui.theme.localizedLabelsFor
+import java.util.Locale
 import kotlin.math.roundToInt
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SettingsSheet(
     state: TycoonSaveState,
     showReturnToHome: Boolean,
     onToggleMute: () -> Unit,
+    onMasterVolumeChange: (Float) -> Unit,
+    onAmbientVolumeChange: (Float) -> Unit,
+    onWeatherVolumeChange: (Float) -> Unit,
+    onWaterVolumeChange: (Float) -> Unit,
     onSfxVolumeChange: (Float) -> Unit,
     onMusicVolumeChange: (Float) -> Unit,
     onGraphicsQualityChange: (Int) -> Unit,
+    onShadowQualityChange: (Int) -> Unit = {},
+    onCameraSensitivityChange: (Float) -> Unit = {},
+    onCameraDistanceChange: (Float) -> Unit = {},
+    onFpsLimitChange: (Int) -> Unit = {},
+    onLanguageChange: (String) -> Unit = {},
+    onResetSettings: () -> Unit = {},
     onToggleHaptics: () -> Unit,
     onReturnToHome: () -> Unit,
     onOpenAdvisor: () -> Unit,
@@ -88,11 +111,13 @@ fun SettingsSheet(
     onResetProgress: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    var showResetConfirm by remember { mutableStateOf(false) }
+    var showResetSaveConfirm by remember { mutableStateOf(false) }
+    var showResetSettingsConfirm by remember { mutableStateOf(false) }
+    val labels = remember(state.languageCode) { localizedLabelsFor(state.languageCode) }
 
     FrontierSheetScaffold(
-        title = "Settings & Audio",
-        subtitle = "Sound, music, graphics quality & companion tools",
+        title = labels.settingsTitle,
+        subtitle = "Graphics, shadows, camera, audio & language",
         headerIcon = Icons.Filled.Settings,
         accentColor = LichenMuted,
         closeTestTag = "btn_close_settings",
@@ -106,6 +131,178 @@ fun SettingsSheet(
                 .padding(bottom = 22.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            // Graphics, Shadows & Frame Rate Card
+            FrontierGlassCard(accentBorder = AmberGold) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    FrontierSectionHeader(
+                        title = "Graphics & Performance",
+                        accent = AmberGold
+                    )
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Filled.Tune,
+                            contentDescription = null,
+                            tint = AmberBright,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Graphics Quality",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = CreamText
+                        )
+                    }
+
+                    val gfxPresets = listOf("Low", "Medium", "High")
+                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                        gfxPresets.forEachIndexed { idx, label ->
+                            SegmentedButton(
+                                selected = state.graphicsQuality == idx,
+                                onClick = { onGraphicsQualityChange(idx) },
+                                shape = SegmentedButtonDefaults.itemShape(index = idx, count = gfxPresets.size),
+                                colors = SegmentedButtonDefaults.colors(
+                                    activeContainerColor = AmberGold,
+                                    activeContentColor = ObsidianForest,
+                                    inactiveContainerColor = PanelCard,
+                                    inactiveContentColor = LichenMuted,
+                                    activeBorderColor = AmberGold,
+                                    inactiveBorderColor = PanelBorder
+                                ),
+                                modifier = Modifier.testTag("btn_gfx_$idx")
+                            ) {
+                                Text(label, style = MaterialTheme.typography.labelMedium)
+                            }
+                        }
+                    }
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Filled.WbSunny,
+                            contentDescription = null,
+                            tint = AmberBright,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Shadow Quality",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = CreamText
+                        )
+                    }
+
+                    val shadowPresets = listOf("Off", "Medium", "High")
+                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                        shadowPresets.forEachIndexed { idx, label ->
+                            SegmentedButton(
+                                selected = state.shadowQuality == idx,
+                                onClick = { onShadowQualityChange(idx) },
+                                shape = SegmentedButtonDefaults.itemShape(index = idx, count = shadowPresets.size),
+                                colors = SegmentedButtonDefaults.colors(
+                                    activeContainerColor = AmberGold,
+                                    activeContentColor = ObsidianForest,
+                                    inactiveContainerColor = PanelCard,
+                                    inactiveContentColor = LichenMuted,
+                                    activeBorderColor = AmberGold,
+                                    inactiveBorderColor = PanelBorder
+                                ),
+                                modifier = Modifier.testTag("btn_shadow_$idx")
+                            ) {
+                                Text(label, style = MaterialTheme.typography.labelMedium)
+                            }
+                        }
+                    }
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Filled.Speed,
+                            contentDescription = null,
+                            tint = EmeraldCanopy,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "FPS Limit",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = CreamText
+                        )
+                    }
+
+                    val fpsOptions = listOf(30, 60)
+                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                        fpsOptions.forEachIndexed { idx, fps ->
+                            val selected = (if (state.fpsLimit <= 35) 30 else 60) == fps
+                            SegmentedButton(
+                                selected = selected,
+                                onClick = { onFpsLimitChange(fps) },
+                                shape = SegmentedButtonDefaults.itemShape(index = idx, count = fpsOptions.size),
+                                colors = SegmentedButtonDefaults.colors(
+                                    activeContainerColor = EmeraldCanopy,
+                                    activeContentColor = ObsidianForest,
+                                    inactiveContainerColor = PanelCard,
+                                    inactiveContentColor = LichenMuted,
+                                    activeBorderColor = EmeraldCanopy,
+                                    inactiveBorderColor = PanelBorder
+                                ),
+                                modifier = Modifier.testTag("btn_fps_$fps")
+                            ) {
+                                Text("$fps FPS", style = MaterialTheme.typography.labelMedium)
+                            }
+                        }
+                    }
+
+                    SettingToggleRow(
+                        icon = Icons.Filled.Vibration,
+                        title = "Haptic Feedback",
+                        subtitle = if (state.hapticsEnabled) "Tactile pulse on hits & sales" else "Vibration disabled",
+                        checked = state.hapticsEnabled,
+                        accent = AmberGold,
+                        testTag = "switch_haptics",
+                        onToggle = onToggleHaptics
+                    )
+                }
+            }
+
+            // Camera Controls Card
+            FrontierGlassCard(accentBorder = CrystalCyan) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    FrontierSectionHeader(
+                        title = "Camera Controls",
+                        accent = CrystalCyan
+                    )
+
+                    FloatSliderRow(
+                        icon = Icons.Filled.CameraAlt,
+                        label = "Camera Sensitivity",
+                        value = state.cameraSensitivity.coerceIn(0.5f, 2.0f),
+                        valueRange = 0.5f..2.0f,
+                        valueText = String.format(Locale.US, "%.1fx", state.cameraSensitivity),
+                        enabled = true,
+                        accent = CrystalCyan,
+                        testTag = "slider_cam_sensitivity",
+                        onValueChange = onCameraSensitivityChange
+                    )
+
+                    FloatSliderRow(
+                        icon = Icons.Filled.ZoomOutMap,
+                        label = "Camera Distance",
+                        value = state.cameraDistance.coerceIn(8.0f, 18.0f),
+                        valueRange = 8.0f..18.0f,
+                        valueText = String.format(Locale.US, "%.1fm", state.cameraDistance),
+                        enabled = true,
+                        accent = CrystalCyan,
+                        testTag = "slider_cam_distance",
+                        onValueChange = onCameraDistanceChange
+                    )
+                }
+            }
+
             // Audio Mixer Card
             FrontierGlassCard(accentBorder = EmeraldCanopy) {
                 Column(
@@ -120,12 +317,52 @@ fun SettingsSheet(
                     SettingToggleRow(
                         icon = if (state.isMuted) Icons.AutoMirrored.Filled.VolumeOff
                         else Icons.AutoMirrored.Filled.VolumeUp,
-                        title = "Master Audio",
+                        title = "Master Mute",
                         subtitle = if (state.isMuted) "All game audio muted" else "Audio active",
-                        checked = !state.isMuted,
-                        accent = EmeraldCanopy,
+                        checked = state.isMuted,
+                        accent = if (state.isMuted) CoralCrimson else EmeraldCanopy,
                         testTag = "btn_toggle_mute",
                         onToggle = onToggleMute
+                    )
+
+                    VolumeSliderRow(
+                        icon = Icons.Filled.Tune,
+                        label = "Overall Audio",
+                        value = state.masterVolume,
+                        enabled = !state.isMuted,
+                        accent = EmeraldCanopy,
+                        testTag = "slider_master_volume",
+                        onValueChange = onMasterVolumeChange
+                    )
+
+                    VolumeSliderRow(
+                        icon = Icons.Filled.Forest,
+                        label = "Ambient Sounds",
+                        value = state.ambientVolume,
+                        enabled = !state.isMuted,
+                        accent = EmeraldCanopy,
+                        testTag = "slider_ambient_volume",
+                        onValueChange = onAmbientVolumeChange
+                    )
+
+                    VolumeSliderRow(
+                        icon = Icons.Filled.WaterDrop,
+                        label = "Weather Sounds",
+                        value = state.weatherVolume,
+                        enabled = !state.isMuted,
+                        accent = CrystalCyan,
+                        testTag = "slider_weather_volume",
+                        onValueChange = onWeatherVolumeChange
+                    )
+
+                    VolumeSliderRow(
+                        icon = Icons.Filled.Waves,
+                        label = "Water Sounds",
+                        value = state.waterVolume,
+                        enabled = !state.isMuted,
+                        accent = CrystalCyan,
+                        testTag = "slider_water_volume",
+                        onValueChange = onWaterVolumeChange
                     )
 
                     VolumeSliderRow(
@@ -140,73 +377,69 @@ fun SettingsSheet(
 
                     VolumeSliderRow(
                         icon = Icons.Filled.MusicNote,
-                        label = "Background Music",
+                        label = "Music Volume",
                         value = state.musicVolume,
                         enabled = !state.isMuted,
-                        accent = CrystalCyan,
+                        accent = AmberBright,
                         testTag = "slider_music_volume",
                         onValueChange = onMusicVolumeChange
                     )
                 }
             }
 
-            // Graphics & Haptics Card
-            FrontierGlassCard(accentBorder = AmberGold) {
+            // Language Selection Card
+            FrontierGlassCard(accentBorder = AmberBright) {
                 Column(
                     modifier = Modifier.padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     FrontierSectionHeader(
-                        title = "Graphics & Haptics",
-                        accent = AmberGold
+                        title = "Language Selection",
+                        accent = AmberBright
                     )
-
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            imageVector = Icons.Filled.Tune,
+                            imageVector = Icons.Filled.Language,
                             contentDescription = null,
                             tint = AmberBright,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "3D Render Quality",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = CreamText
+                            text = "Select interface language",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = LichenMuted
                         )
                     }
-
-                    val presets = listOf("Balanced", "High", "Ultra")
-                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                        presets.forEachIndexed { idx, label ->
-                            SegmentedButton(
-                                selected = state.graphicsQuality == idx,
-                                onClick = { onGraphicsQualityChange(idx) },
-                                shape = SegmentedButtonDefaults.itemShape(index = idx, count = presets.size),
-                                colors = SegmentedButtonDefaults.colors(
-                                    activeContainerColor = AmberGold,
-                                    activeContentColor = ObsidianForest,
-                                    inactiveContainerColor = PanelCard,
-                                    inactiveContentColor = LichenMuted,
-                                    activeBorderColor = AmberGold,
-                                    inactiveBorderColor = PanelBorder
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        SupportedLanguages.forEach { lang ->
+                            val selected = state.languageCode == lang.code
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (selected) AmberGold.copy(alpha = 0.2f) else PanelCard,
+                                border = BorderStroke(
+                                    1.2.dp,
+                                    if (selected) AmberGold else PanelBorder.copy(alpha = 0.65f)
                                 ),
-                                modifier = Modifier.testTag("btn_gfx_${label.lowercase()}")
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable { onLanguageChange(lang.code) }
+                                    .minimumInteractiveComponentSize()
+                                    .testTag("btn_lang_${lang.code}")
                             ) {
-                                Text(label, style = MaterialTheme.typography.labelMedium)
+                                Text(
+                                    text = lang.nativeLabel,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = if (selected) AmberBright else CreamText,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                                )
                             }
                         }
                     }
-
-                    SettingToggleRow(
-                        icon = Icons.Filled.Vibration,
-                        title = "Haptic Feedback",
-                        subtitle = if (state.hapticsEnabled) "Tactile pulse on hits & sales" else "Vibration disabled",
-                        checked = state.hapticsEnabled,
-                        accent = AmberGold,
-                        testTag = "switch_haptics",
-                        onToggle = onToggleHaptics
-                    )
                 }
             }
 
@@ -247,7 +480,7 @@ fun SettingsSheet(
                 }
             }
 
-            // Navigation, Autosave & Reset Card
+            // Navigation, Reset Settings & Save Data Card
             FrontierGlassCard {
                 Column(
                     modifier = Modifier.padding(14.dp),
@@ -272,11 +505,26 @@ fun SettingsSheet(
                                 color = CreamText
                             )
                             Text(
-                                text = "Money, inventory, upgrades & regions save automatically.",
+                                text = "Money, inventory, upgrades, regions & settings save locally.",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = LichenMuted
                             )
                         }
+                    }
+
+                    OutlinedButton(
+                        onClick = { showResetSettingsConfirm = true },
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = AmberBright),
+                        border = BorderStroke(1.dp, AmberGold.copy(alpha = 0.55f)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .minimumInteractiveComponentSize()
+                            .testTag("btn_reset_settings")
+                    ) {
+                        Icon(Icons.Filled.RestartAlt, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(labels.resetSettingsBtn, style = MaterialTheme.typography.labelLarge)
                     }
 
                     if (showReturnToHome) {
@@ -300,7 +548,7 @@ fun SettingsSheet(
                     }
 
                     OutlinedButton(
-                        onClick = { showResetConfirm = true },
+                        onClick = { showResetSaveConfirm = true },
                         shape = RoundedCornerShape(14.dp),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = CoralCrimson),
                         border = BorderStroke(1.dp, CoralCrimson.copy(alpha = 0.55f)),
@@ -318,18 +566,45 @@ fun SettingsSheet(
         }
     }
 
-    if (showResetConfirm) {
+    if (showResetSettingsConfirm) {
         AlertDialog(
-            onDismissRequest = { showResetConfirm = false },
+            onDismissRequest = { showResetSettingsConfirm = false },
+            containerColor = PanelDark,
+            titleContentColor = CreamText,
+            textContentColor = LichenMuted,
+            title = { Text("Reset Settings?") },
+            text = { Text("This restores graphics, shadow quality, camera distance, sensitivity, FPS limit, language, and audio volumes to their defaults without erasing your saved world.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showResetSettingsConfirm = false
+                        onResetSettings()
+                    },
+                    modifier = Modifier.testTag("btn_confirm_reset_settings")
+                ) {
+                    Text("Reset Settings", color = AmberBright, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetSettingsConfirm = false }) {
+                    Text(labels.cancelBtn, color = CreamText)
+                }
+            }
+        )
+    }
+
+    if (showResetSaveConfirm) {
+        AlertDialog(
+            onDismissRequest = { showResetSaveConfirm = false },
             containerColor = PanelDark,
             titleContentColor = CreamText,
             textContentColor = LichenMuted,
             title = { Text("Reset Frontier Progress?") },
-            text = { Text("This clears your coins, tools, factories, quests, and unlocked regions so you can start a fresh tycoon run.") },
+            text = { Text("This clears your coins, tools, factories, quests, and unlocked regions in the active save slot so you can start a fresh tycoon run.") },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        showResetConfirm = false
+                        showResetSaveConfirm = false
                         onResetProgress()
                         onDismiss()
                     },
@@ -339,8 +614,8 @@ fun SettingsSheet(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showResetConfirm = false }) {
-                    Text("Cancel", color = CreamText)
+                TextButton(onClick = { showResetSaveConfirm = false }) {
+                    Text(labels.cancelBtn, color = CreamText)
                 }
             }
         )
@@ -352,6 +627,31 @@ private fun VolumeSliderRow(
     icon: ImageVector,
     label: String,
     value: Float,
+    enabled: Boolean,
+    accent: Color,
+    testTag: String,
+    onValueChange: (Float) -> Unit
+) {
+    FloatSliderRow(
+        icon = icon,
+        label = label,
+        value = value.coerceIn(0f, 1f),
+        valueRange = 0f..1f,
+        valueText = "${(value * 100f).roundToInt()}%",
+        enabled = enabled,
+        accent = accent,
+        testTag = testTag,
+        onValueChange = onValueChange
+    )
+}
+
+@Composable
+private fun FloatSliderRow(
+    icon: ImageVector,
+    label: String,
+    value: Float,
+    valueRange: ClosedFloatingPointRange<Float>,
+    valueText: String,
     enabled: Boolean,
     accent: Color,
     testTag: String,
@@ -378,7 +678,7 @@ private fun VolumeSliderRow(
                 )
             }
             Text(
-                text = "${(value * 100f).roundToInt()}%",
+                text = valueText,
                 style = MaterialTheme.typography.labelMedium,
                 color = if (enabled) accent else LichenMuted,
                 fontWeight = FontWeight.Bold
@@ -387,6 +687,7 @@ private fun VolumeSliderRow(
         Slider(
             value = value,
             onValueChange = onValueChange,
+            valueRange = valueRange,
             enabled = enabled,
             colors = SliderDefaults.colors(
                 thumbColor = accent,
