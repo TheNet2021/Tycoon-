@@ -696,8 +696,23 @@
   const scene = new THREE.Scene();
   const currentSkyColor = linCol(0x5eb8e5);
   const currentFogColor = linCol(0x8bcbe8);
-  scene.background = currentSkyColor;
-  scene.fog = new THREE.FogExp2(currentFogColor.getHex(), 0.0024);
+  const currentRenderedSkyColor = currentSkyColor.clone();
+  const currentRenderedFogColor = currentFogColor.clone();
+  const currentRenderedBottomColor = currentFogColor.clone().multiplyScalar(0.5);
+  const overcastSkyTop = linCol(0x6b8096);
+  const overcastFogHorizon = linCol(0x95a6b5);
+  const overcastGroundTint = linCol(0x465664);
+  const overcastSunColor = linCol(0xe4edf7);
+  const currentBaseHemiSky = linCol(0xd8f0ff);
+  const currentBaseHemiGround = linCol(0x3a4d32);
+  const currentBaseSunColor = linCol(0xfff1d6);
+  let baseFogDensity = 0.0024;
+  let baseSunIntensity = 1.38;
+  const BASE_AMBIENT_INTENSITY = 0.34;
+  const BASE_HEMI_INTENSITY = 0.56;
+  const BASE_RIM_INTENSITY = 0.50;
+  scene.background = currentRenderedSkyColor;
+  scene.fog = new THREE.FogExp2(currentRenderedFogColor.getHex(), baseFogDensity);
 
   const initialSize = getViewportSize();
   const GAMEPLAY_FOV = 70;
@@ -750,6 +765,7 @@
       ].join("\n")
     })
   );
+  skyDome.renderOrder = -1;
   scene.add(skyDome);
 
   // Balanced 4-Light Outdoor PBR Rig: warm ambient + sky/moss hemisphere + dual shadow-casting directional lights
@@ -5459,6 +5475,13 @@
     weatherTimer = 26.0;
     rainIntensity = 0.0;
     overcastFactor = 0.0;
+    baseFogDensity = 0.0024;
+    baseSunIntensity = 1.38;
+    scene.fog.density = baseFogDensity;
+    sunLight.intensity = baseSunIntensity;
+    hemiLight.intensity = BASE_HEMI_INTENSITY;
+    ambientLight.intensity = BASE_AMBIENT_INTENSITY;
+    rimLight.intensity = BASE_RIM_INTENSITY;
     rainMesh.visible = false;
     refreshCharacterVisuals();
     refreshWorldState();
@@ -5573,13 +5596,16 @@
   rainPosAttr.setUsage(THREE.DynamicDrawUsage);
   rainGeo.setAttribute("position", rainPosAttr);
   const rainMat = new THREE.LineBasicMaterial({
-    color: 0xcbe7ff,
+    color: 0xd8ecff,
     transparent: true,
     opacity: 0.0,
-    depthWrite: false
+    depthTest: true,
+    depthWrite: false,
+    fog: false
   });
   const rainMesh = new THREE.LineSegments(rainGeo, rainMat);
   rainMesh.frustumCulled = false;
+  rainMesh.renderOrder = 5;
   rainMesh.visible = false;
   scene.add(rainMesh);
 
@@ -5588,6 +5614,21 @@
       weatherState = nextWeather;
       weatherTimer = nextWeather === "RAIN" ? 32.0 : (nextWeather === "OVERCAST" ? 10.0 : 38.0);
     }
+  };
+
+  window.getWeatherDebugState = function () {
+    return {
+      weatherState: weatherState,
+      rainIntensity: Math.round(rainIntensity * 1000) / 1000,
+      overcastFactor: Math.round(overcastFactor * 1000) / 1000,
+      fogDensity: scene.fog ? Math.round(scene.fog.density * 100000) / 100000 : 0,
+      baseFogDensity: Math.round(baseFogDensity * 100000) / 100000,
+      sunIntensity: Math.round(sunLight.intensity * 1000) / 1000,
+      hemiIntensity: Math.round(hemiLight.intensity * 1000) / 1000,
+      ambientIntensity: Math.round(ambientLight.intensity * 1000) / 1000,
+      rainVisible: rainMesh.visible,
+      rainOpacity: Math.round(rainMat.opacity * 1000) / 1000
+    };
   };
 
   function tickWeather(dt, biomeId, px, pz) {
@@ -5635,8 +5676,11 @@
       const q = typeof state.graphicsQuality === "number" ? state.graphicsQuality : 1;
       const activeCount = q === 0 ? 85 : RAIN_DROP_COUNT;
       rainMesh.visible = true;
-      rainMat.opacity = Math.min(0.46, rainIntensity * 0.46);
+      rainMat.opacity = Math.min(0.38, rainIntensity * 0.38);
       rainGeo.setDrawRange(0, activeCount * 2);
+      const camX = camera.position.x;
+      const camY = camera.position.y;
+      const camZ = camera.position.z;
       for (let ri = 0; ri < activeCount; ri++) {
         const idx4 = ri * 4;
         let ry = rainMeta[idx4 + 1] - rainMeta[idx4 + 3] * dt;
@@ -5645,12 +5689,23 @@
         const rx = px + rainMeta[idx4];
         const rz = pz + rainMeta[idx4 + 2];
         const idx6 = ri * 6;
-        rainPositions[idx6] = rx;
-        rainPositions[idx6 + 1] = ry;
-        rainPositions[idx6 + 2] = rz;
-        rainPositions[idx6 + 3] = rx - 0.14;
-        rainPositions[idx6 + 4] = ry - 0.68;
-        rainPositions[idx6 + 5] = rz - 0.08;
+        // Skip drops right in front of the camera near-plane so streaks never block the lens
+        const dCamSq = (rx - camX) * (rx - camX) + (ry - camY) * (ry - camY) + (rz - camZ) * (rz - camZ);
+        if (dCamSq < 4.4) {
+          rainPositions[idx6] = rx;
+          rainPositions[idx6 + 1] = -10;
+          rainPositions[idx6 + 2] = rz;
+          rainPositions[idx6 + 3] = rx;
+          rainPositions[idx6 + 4] = -10;
+          rainPositions[idx6 + 5] = rz;
+        } else {
+          rainPositions[idx6] = rx;
+          rainPositions[idx6 + 1] = ry;
+          rainPositions[idx6 + 2] = rz;
+          rainPositions[idx6 + 3] = rx - 0.11;
+          rainPositions[idx6 + 4] = ry - 0.56;
+          rainPositions[idx6 + 5] = rz - 0.06;
+        }
       }
       rainPosAttr.needsUpdate = true;
     } else {
@@ -6039,31 +6094,39 @@
       }
       currentSkyColor.lerp(linCol(bNow2.sky), dt * 2.5);
       currentFogColor.lerp(linCol(bNow2.fog), dt * 2.5);
-      skyUniforms.uTop.value.copy(currentSkyColor);
-      skyUniforms.uHorizon.value.copy(currentFogColor);
-      skyUniforms.uBottom.value.copy(currentFogColor).multiplyScalar(0.5);
-      scene.fog.color.copy(currentFogColor);
-      renderer.setClearColor(currentSkyColor, 1);
 
       if (window.BiomeEnvBuilder && window.BiomeEnvBuilder.BIOME_ATMOSPHERE[bNow2.id]) {
         const atmo = window.BiomeEnvBuilder.BIOME_ATMOSPHERE[bNow2.id];
         const atmoRate = Math.min(1, dt * 2.2);
-        scene.fog.density += (atmo.fogDensity - scene.fog.density) * atmoRate;
-        hemiLight.color.lerp(linCol(atmo.hemiSky), atmoRate);
-        hemiLight.groundColor.lerp(linCol(atmo.hemiGround), atmoRate);
-        sunLight.color.lerp(linCol(atmo.sunCol), atmoRate);
-        sunLight.intensity += (atmo.sunInt - sunLight.intensity) * atmoRate;
+        baseFogDensity += (atmo.fogDensity - baseFogDensity) * atmoRate;
+        currentBaseHemiSky.lerp(linCol(atmo.hemiSky), atmoRate);
+        currentBaseHemiGround.lerp(linCol(atmo.hemiGround), atmoRate);
+        currentBaseSunColor.lerp(linCol(atmo.sunCol), atmoRate);
+        baseSunIntensity += (atmo.sunInt - baseSunIntensity) * atmoRate;
         window.BiomeEnvBuilder.updateAnimations(now, dt, biomeChunkGroups);
       }
-      if (overcastFactor > 0.002) {
-        const skyDim = 1 - overcastFactor * 0.28;
-        skyUniforms.uTop.value.multiplyScalar(skyDim);
-        skyUniforms.uHorizon.value.multiplyScalar(skyDim);
-        skyUniforms.uBottom.value.multiplyScalar(skyDim);
-        scene.fog.color.multiplyScalar(skyDim);
-        scene.fog.density *= (1 + overcastFactor * 0.45);
-        sunLight.intensity *= (1 - overcastFactor * 0.32);
-      }
+
+      // Compute final weather-blended atmosphere statelessly from base biome targets (zero exponential compounding)
+      const cloudBlend = Math.min(0.62, overcastFactor * 0.62);
+      currentRenderedSkyColor.copy(currentSkyColor).lerp(overcastSkyTop, cloudBlend);
+      currentRenderedFogColor.copy(currentFogColor).lerp(overcastFogHorizon, cloudBlend * 0.88);
+      currentRenderedBottomColor.copy(currentRenderedFogColor).multiplyScalar(0.54);
+
+      skyUniforms.uTop.value.copy(currentRenderedSkyColor);
+      skyUniforms.uHorizon.value.copy(currentRenderedFogColor);
+      skyUniforms.uBottom.value.copy(currentRenderedBottomColor);
+      scene.fog.color.copy(currentRenderedFogColor);
+      renderer.setClearColor(currentRenderedSkyColor, 1);
+
+      scene.fog.density = Math.min(0.0085, baseFogDensity * (1 + overcastFactor * 0.36));
+
+      sunLight.intensity = baseSunIntensity * (1 - overcastFactor * 0.28);
+      sunLight.color.copy(currentBaseSunColor).lerp(overcastSunColor, overcastFactor * 0.32);
+      hemiLight.color.copy(currentBaseHemiSky).lerp(overcastFogHorizon, overcastFactor * 0.38);
+      hemiLight.groundColor.copy(currentBaseHemiGround).lerp(overcastGroundTint, overcastFactor * 0.25);
+      hemiLight.intensity = BASE_HEMI_INTENSITY + overcastFactor * 0.16;
+      ambientLight.intensity = BASE_AMBIENT_INTENSITY + overcastFactor * 0.14;
+      rimLight.intensity = BASE_RIM_INTENSITY + overcastFactor * 0.08;
       if (window.HexagonDistrictBuilder) {
         window.HexagonDistrictBuilder.updateAnimations(now, dt, biomeChunkGroups);
       }
