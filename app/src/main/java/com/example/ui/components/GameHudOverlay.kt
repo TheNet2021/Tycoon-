@@ -447,6 +447,12 @@ fun GameHudOverlay(
                 }
             }
 
+            // Third Bar: Live Settlement Population, Food, Water & Happiness Telemetry
+            SettlementHudOverlay(
+                settlement = state.settlement,
+                onOpenSettlement = onOpenSettlement
+            )
+
             // Offline Passive Catch-up Banner
             AnimatedVisibility(
                 visible = (offlineEarnings ?: 0L) > 0L,

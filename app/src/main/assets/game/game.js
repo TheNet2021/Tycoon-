@@ -1634,15 +1634,19 @@
     ctx.strokeRect(8, 8, s - 16, s - 16);
   });
 
+  const extraEnvTex = window.BiomeEnvBuilder
+    ? window.BiomeEnvBuilder.buildEnvironmentTextures(THREE, makeCanvasTex)
+    : {};
+
   // Vertex-Colored Sculpted Biome Terrains across all 12 World Areas
   const biomeFloorTex = {
     forest: texGrass,
     mountains: texRock,
-    desert: texSand,
+    desert: extraEnvTex.texDuneRipple || texSand,
     frozen: texIce,
     volcanic: texBasalt,
     jungle: texGrass,
-    crystal_desert: texSand,
+    crystal_desert: extraEnvTex.texCrystalSand || texSand,
     sky_islands: texGrass,
     toxic_swamp: texSwamp,
     frozen_mountains: texIce,
@@ -1659,17 +1663,17 @@
 
   const BIOME_PALETTES = {
     forest:                [0x5ca842, 0xb57542, 0x3b752c],
-    mountains:             [0x94a3b8, 0x717d8c, 0x5d6875],
-    desert:                [0xf5cc84, 0xd99e4c, 0xc28738],
-    frozen:                [0xd8effc, 0x9bd7f2, 0x82b8d9],
-    volcanic:              [0x705c5a, 0x8f3a26, 0x3f3332],
-    jungle:                [0x269c5e, 0x8f6f46, 0x165e3e],
-    crystal_desert:        [0xf2b5d4, 0xd946ef, 0xb47eb3],
-    sky_islands:           [0x68d391, 0xe2f3ff, 0x319795],
-    toxic_swamp:           [0x4a6b32, 0x7c8f43, 0x283d1d],
-    frozen_mountains:      [0xdbeafe, 0x7dd3fc, 0x93c5fd],
-    volcanic_lands:        [0x452220, 0x991b1b, 0x261514],
-    ancient_machine_world: [0x475569, 0x0284c7, 0x334155]
+    mountains:             [0x8b9bab, 0x6f7c8c, 0x525e6e, 0x3f4a57],
+    desert:                [0xf2c578, 0xd99e4c, 0xc78436, 0x9c6122],
+    frozen:                [0xd8effc, 0x9bd7f2, 0x82b8d9, 0x5b97bf],
+    volcanic:              [0x614e4c, 0x8c3b28, 0x332726, 0x211312],
+    jungle:                [0x249658, 0x8f6f46, 0x165e3e, 0x0f472f],
+    crystal_desert:        [0xedb0d0, 0xd946ef, 0xb47eb3, 0x8a4d94],
+    sky_islands:           [0x64cf8d, 0xe2f3ff, 0x2c8f8d, 0x1e6e70],
+    toxic_swamp:           [0x46662f, 0x7c8f43, 0x25381b, 0x192912],
+    frozen_mountains:      [0xdbeafe, 0x7dd3fc, 0x78a9db, 0x4b77a6],
+    volcanic_lands:        [0x42201e, 0x991b1b, 0x261514, 0x170b0a],
+    ancient_machine_world: [0x435266, 0x0284c7, 0x2c3a4c, 0x1d2938]
   };
 
   BIOMES.forEach((b, bi) => {
@@ -1684,7 +1688,6 @@
     chunkGrp.add(baseRim);
 
     if (isSky) {
-      // Fluffy cloud underside for floating sky island
       for (let ci = 0; ci < 6; ci++) {
         const ang = (ci / 6) * Math.PI * 2;
         const puff = new THREE.Mesh(
@@ -1704,70 +1707,74 @@
       chunkGrp.add(cliff);
     }
 
-    const segs = 40;
-    const topGeo = new THREE.PlaneGeometry(31.2, 31.2, segs, segs);
-    topGeo.rotateX(-Math.PI / 2);
-    const pos = topGeo.attributes.position;
-    const colors = new Float32Array(pos.count * 3);
-    const pal = BIOME_PALETTES[b.id] || BIOME_PALETTES.forest;
-    const cMain = linCol(pal[0]);
-    const cTrail = linCol(pal[1]);
-    const cMoss = linCol(pal[2]);
-    const tmpCol = new THREE.Color();
+    // Preserve Map 1 ("forest") exact geometry, shading, and details untouched.
+    // Maps 2-12 terrain meshes & dense scenery are constructed via BiomeEnvBuilder once all pads/nodes exist.
+    if (b.id === "forest" || !window.BiomeEnvBuilder) {
+      const segs = 40;
+      const topGeo = new THREE.PlaneGeometry(31.2, 31.2, segs, segs);
+      topGeo.rotateX(-Math.PI / 2);
+      const pos = topGeo.attributes.position;
+      const colors = new Float32Array(pos.count * 3);
+      const pal = BIOME_PALETTES[b.id] || BIOME_PALETTES.forest;
+      const cMain = linCol(pal[0]);
+      const cTrail = linCol(pal[1]);
+      const cMoss = linCol(pal[2]);
+      const tmpCol = new THREE.Color();
 
-    for (let i = 0; i < pos.count; i++) {
-      const lx = pos.getX(i);
-      const lz = pos.getZ(i);
-      const n1 = Math.sin(lx * 0.42 + bi * 1.7) * Math.cos(lz * 0.38 - bi);
-      const n2 = Math.sin((lx + lz) * 0.75 + bi) * 0.5;
-      const edgeDist = Math.max(Math.abs(lx), Math.abs(lz));
-      const nearBridgeAxis = Math.abs(lx) < 3.0 || Math.abs(lz) < 3.0;
+      for (let i = 0; i < pos.count; i++) {
+        const lx = pos.getX(i);
+        const lz = pos.getZ(i);
+        const n1 = Math.sin(lx * 0.42 + bi * 1.7) * Math.cos(lz * 0.38 - bi);
+        const n2 = Math.sin((lx + lz) * 0.75 + bi) * 0.5;
+        const edgeDist = Math.max(Math.abs(lx), Math.abs(lz));
+        const nearBridgeAxis = Math.abs(lx) < 3.0 || Math.abs(lz) < 3.0;
 
-      let pathFactor = 0;
-      if (b.id === "forest") {
-        const d1 = distToSegment(lx, lz, 0, 0.5, -4.6, 5.4);
-        const d2 = distToSegment(lx, lz, 0, 0.5, 7.5, 6.5);
-        const d3 = distToSegment(lx, lz, 0, 0.5, 7.5, -4.5);
-        const d4 = distToSegment(lx, lz, 0, 0.5, -8.0, -6.0);
-        const d5 = distToSegment(lx, lz, 0, -15.5, 0, 15.5);
-        const d6 = distToSegment(lx, lz, -15.5, 0, 15.5, 0);
-        const minPath = Math.min(d1, d2, d3, d4, d5, d6);
-        pathFactor = Math.max(0, Math.min(1, (2.1 - minPath) / 1.3));
-      } else {
-        const dCross = Math.min(Math.abs(lx), Math.abs(lz));
-        pathFactor = Math.max(0, Math.min(1, (2.0 - dCross) / 1.2));
+        let pathFactor = 0;
+        if (b.id === "forest") {
+          const d1 = distToSegment(lx, lz, 0, 0.5, -4.6, 5.4);
+          const d2 = distToSegment(lx, lz, 0, 0.5, 7.5, 6.5);
+          const d3 = distToSegment(lx, lz, 0, 0.5, 7.5, -4.5);
+          const d4 = distToSegment(lx, lz, 0, 0.5, -8.0, -6.0);
+          const d5 = distToSegment(lx, lz, 0, -15.5, 0, 15.5);
+          const d6 = distToSegment(lx, lz, -15.5, 0, 15.5, 0);
+          const minPath = Math.min(d1, d2, d3, d4, d5, d6);
+          pathFactor = Math.max(0, Math.min(1, (2.1 - minPath) / 1.3));
+        } else {
+          const dCross = Math.min(Math.abs(lx), Math.abs(lz));
+          pathFactor = Math.max(0, Math.min(1, (2.0 - dCross) / 1.2));
+        }
+
+        let lift = 0;
+        if (edgeDist > 13.6 && !nearBridgeAxis) {
+          lift = ((edgeDist - 13.6) / 2.0) * (0.28 + n1 * 0.08);
+        } else if (pathFactor < 0.15 && Math.hypot(lx, lz) > 7.4) {
+          lift = Math.max(0, n1 * 0.05 + n2 * 0.025);
+        }
+        pos.setY(i, lift);
+
+        const mossWeight = Math.max(0, Math.min(1, 0.35 + n1 * 0.3 + (edgeDist > 12.6 ? 0.32 : 0)));
+        tmpCol.copy(cMain).lerp(cMoss, mossWeight).lerp(cTrail, pathFactor * 0.85);
+        colors[i * 3] = tmpCol.r;
+        colors[i * 3 + 1] = tmpCol.g;
+        colors[i * 3 + 2] = tmpCol.b;
       }
+      topGeo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+      topGeo.computeVertexNormals();
 
-      let lift = 0;
-      if (edgeDist > 13.6 && !nearBridgeAxis) {
-        lift = ((edgeDist - 13.6) / 2.0) * (0.28 + n1 * 0.08);
-      } else if (pathFactor < 0.15 && Math.hypot(lx, lz) > 7.4) {
-        lift = Math.max(0, n1 * 0.05 + n2 * 0.025);
-      }
-      pos.setY(i, lift);
-
-      const mossWeight = Math.max(0, Math.min(1, 0.35 + n1 * 0.3 + (edgeDist > 12.6 ? 0.32 : 0)));
-      tmpCol.copy(cMain).lerp(cMoss, mossWeight).lerp(cTrail, pathFactor * 0.85);
-      colors[i * 3] = tmpCol.r;
-      colors[i * 3 + 1] = tmpCol.g;
-      colors[i * 3 + 2] = tmpCol.b;
+      const isIcy = b.id === "frozen" || b.id === "frozen_mountains";
+      const padMat = pbrMat(0xffffff, {
+        map: biomeFloorTex[b.id] || texRock,
+        bumpMap: b.id === "forest" ? texGrassBump : undefined,
+        bumpScale: 0.06,
+        vertexColors: true,
+        roughness: isIcy ? 0.35 : (b.id === "ancient_machine_world" ? 0.55 : 0.86),
+        metalness: isIcy ? 0.1 : (b.id === "ancient_machine_world" ? 0.3 : 0.02)
+      });
+      const topMesh = new THREE.Mesh(topGeo, padMat);
+      topMesh.position.set(b.cx, 0.01, b.cz);
+      topMesh.receiveShadow = true;
+      chunkGrp.add(topMesh);
     }
-    topGeo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
-    topGeo.computeVertexNormals();
-
-    const isIcy = b.id === "frozen" || b.id === "frozen_mountains";
-    const padMat = pbrMat(0xffffff, {
-      map: biomeFloorTex[b.id] || texRock,
-      bumpMap: b.id === "forest" ? texGrassBump : undefined,
-      bumpScale: 0.06,
-      vertexColors: true,
-      roughness: isIcy ? 0.35 : (b.id === "ancient_machine_world" ? 0.55 : 0.86),
-      metalness: isIcy ? 0.1 : (b.id === "ancient_machine_world" ? 0.3 : 0.02)
-    });
-    const topMesh = new THREE.Mesh(topGeo, padMat);
-    topMesh.position.set(b.cx, 0.01, b.cz);
-    topMesh.receiveShadow = true;
-    chunkGrp.add(topMesh);
 
     // Sculpted shoreline cliff boulders around platform corners
     [[-15.4, -15.4], [15.4, -15.4], [-15.4, 15.4], [15.4, 15.4]].forEach(([rx, rz], ci) => {
@@ -1777,75 +1784,6 @@
       cr.rotation.y = ci + bi;
       chunkGrp.add(cr);
     });
-
-    // Distinct Environmental Decorations for the 6 New World Regions
-    if (b.id === "crystal_desert") {
-      const spireMat = pbrMat(0xf472b6, { emissive: 0xdb2777, emissiveIntensity: 0.25, roughness: 0.22, flatShading: true });
-      [[-12, -12], [12, 12], [-12, 11], [11, -12]].forEach(([dx, dz], i) => {
-        const sp = new THREE.Mesh(crystalPrismGeo, spireMat);
-        sp.scale.set(0.8, 1.4 + (i % 2) * 0.5, 0.8);
-        sp.position.set(b.cx + dx, 0.85, b.cz + dz);
-        sp.rotation.z = (i % 2 === 0 ? 0.18 : -0.18);
-        sp.castShadow = true;
-        chunkGrp.add(sp);
-      });
-    } else if (b.id === "sky_islands") {
-      const pillarMat = pbrMat(0xe2e8f0, { roughness: 0.45 });
-      [[-11, -11], [11, -11], [-11, 11], [11, 11]].forEach(([dx, dz]) => {
-        const col = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.58, 2.6, 10), pillarMat);
-        col.position.set(b.cx + dx, 1.3, b.cz + dz);
-        col.castShadow = true;
-        chunkGrp.add(col);
-        const halo = new THREE.Mesh(new THREE.TorusGeometry(0.6, 0.08, 6, 16), pbrMat(0x7dd3fc, { emissive: 0x38bdf8, emissiveIntensity: 0.6 }));
-        halo.position.set(b.cx + dx, 2.9, b.cz + dz);
-        halo.rotation.x = Math.PI / 2;
-        chunkGrp.add(halo);
-      });
-    } else if (b.id === "toxic_swamp") {
-      const glowCapMat = pbrMat(0x84cc16, { emissive: 0x65a30d, emissiveIntensity: 0.45, roughness: 0.4 });
-      [[-12, 11], [11, -12], [-6, -12], [12, 11]].forEach(([dx, dz], i) => {
-        const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.24, 1.1, 8), pbrMat(0x6b7280, { roughness: 0.85 }));
-        stem.position.set(b.cx + dx, 0.55, b.cz + dz);
-        chunkGrp.add(stem);
-        const cap = new THREE.Mesh(new THREE.ConeGeometry(0.75 + (i % 2) * 0.2, 0.48, 9), glowCapMat);
-        cap.position.set(b.cx + dx, 1.25, b.cz + dz);
-        chunkGrp.add(cap);
-      });
-    } else if (b.id === "frozen_mountains") {
-      const iceMat = pbrMat(0xa5f3fc, { emissive: 0x06b6d4, emissiveIntensity: 0.22, roughness: 0.16, flatShading: true });
-      [[-12, -12], [12, -12], [-12, 12], [12, 12]].forEach(([dx, dz], i) => {
-        const spike = new THREE.Mesh(new THREE.ConeGeometry(0.95, 3.1 + (i % 2) * 0.7, 6), iceMat);
-        spike.position.set(b.cx + dx, 1.45, b.cz + dz);
-        spike.castShadow = true;
-        chunkGrp.add(spike);
-      });
-    } else if (b.id === "volcanic_lands") {
-      const rockM = pbrMat(0x271918, { map: texBasalt, roughness: 0.9, flatShading: true });
-      const emberM = pbrMat(0xf97316, { emissive: 0xea580c, emissiveIntensity: 0.85, roughness: 0.3 });
-      [[-12, -12], [12, -12], [-12, 12], [12, 12]].forEach(([dx, dz]) => {
-        const mon = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.85, 2.5, 6), rockM);
-        mon.position.set(b.cx + dx, 1.2, b.cz + dz);
-        mon.castShadow = true;
-        chunkGrp.add(mon);
-        const glow = new THREE.Mesh(sphereGeo, emberM);
-        glow.scale.setScalar(0.32);
-        glow.position.set(b.cx + dx, 2.5, b.cz + dz);
-        chunkGrp.add(glow);
-      });
-    } else if (b.id === "ancient_machine_world") {
-      [[-12, -12], [12, -12], [-12, 12], [12, 12]].forEach(([dx, dz], i) => {
-        const cog = new THREE.Mesh(gearWheelGeo, indMats.brass);
-        cog.scale.setScalar(2.1);
-        cog.position.set(b.cx + dx, 1.1, b.cz + dz);
-        cog.rotation.y = i * 0.8;
-        cog.castShadow = true;
-        chunkGrp.add(cog);
-        const core = new THREE.Mesh(octaGeo, indMats.glowCyan);
-        core.scale.setScalar(0.32);
-        core.position.set(b.cx + dx, 2.25, b.cz + dz);
-        chunkGrp.add(core);
-      });
-    }
   });
 
   // Central Cobble Courtyard & Natural Stepping Flagstones (attached to Forest chunk)
@@ -3725,9 +3663,18 @@
     orb.scale.setScalar(0.55);
     orb.position.y = 4.05;
     g.add(orb);
+
+    let baseOrbY = 4.05;
+    if (lm.biome !== "forest" && window.BiomeEnvBuilder) {
+      const bObj = BIOMES.find((b) => b.id === lm.biome) || { id: lm.biome, accent: lm.col };
+      baseOrbY = window.BiomeEnvBuilder.enhanceBiomeLandmark(
+        THREE, bObj, g, orb, indMats, window.BiomeEnvBuilder.getAnimList(lm.biome)
+      );
+    }
+
     getBiomeChunk(lm.biome).add(g);
     addObstacle(lm.x, lm.z, 1.65);
-    worldLandmarks.push({ id: lm.biome + "_lm", group: g, orb, biome: lm.biome, x: lm.x, z: lm.z });
+    worldLandmarks.push({ id: lm.biome + "_lm", group: g, orb, baseOrbY, biome: lm.biome, x: lm.x, z: lm.z });
   });
 
   // 12 Hidden Underground Cave Entrances with Discovery Rewards
@@ -4622,6 +4569,53 @@
     });
   });
 
+  // Build Sculpted Terrains, Basins & Dense Scenery for Maps 2-12 using complete spatial pad footprints
+  if (window.BiomeEnvBuilder) {
+    const padLookup = {};
+    const registerPad = (biomeId, wx, wz, r) => {
+      const bObj = BIOMES.find((b) => b.id === biomeId);
+      if (!bObj) return;
+      if (!padLookup[biomeId]) padLookup[biomeId] = [];
+      padLookup[biomeId].push({ lx: wx - bObj.cx, lz: wz - bObj.cz, r });
+    };
+    BUILDING_DEFS.forEach((d) => registerPad(d.biome, d.x, d.z, 3.2));
+    MACHINE_DEFS.forEach((m) => registerPad(m.biome, m.x, m.z, 3.4));
+    resourceNodes.forEach((n) => registerPad(n.biome, n.x, n.z, 2.1));
+    LANDMARK_SPECS.forEach((l) => registerPad(l.biome, l.x, l.z, 2.9));
+    CAVE_SPECS.forEach((c) => registerPad(c.biome, c.x, c.z, 2.6));
+    envHazards.forEach((h) => registerPad(h.biome, h.x, h.z, h.r + 0.6));
+    HOSTILE_SPECS.forEach((e) => registerPad(e.biome, e.x, e.z, 2.4));
+    BOSS_SPECS.forEach((b) => registerPad(b.biome, b.x, b.z, 4.9));
+
+    const sceneryDeps = {
+      texRock, texFoliage, texBark,
+      organicRockGeoA, organicRockGeoB, crystalPrismGeo, gearWheelGeo, indMats
+    };
+    BIOMES.forEach((b, bi) => {
+      if (b.id === "forest") return; // Map 1 preserved untouched
+      const chunkGrp = getBiomeChunk(b.id);
+      const pads = padLookup[b.id] || [];
+      window.BiomeEnvBuilder.setBiomePads(b.id, pads);
+
+      const topGeo = window.BiomeEnvBuilder.buildBiomeTerrainGeometry(THREE, b, bi, pads, BIOME_PALETTES);
+      const isIcy = b.id === "frozen" || b.id === "frozen_mountains";
+      const padMat = pbrMat(0xffffff, {
+        map: biomeFloorTex[b.id] || texRock,
+        vertexColors: true,
+        roughness: isIcy ? 0.35 : (b.id === "ancient_machine_world" ? 0.55 : 0.86),
+        metalness: isIcy ? 0.1 : (b.id === "ancient_machine_world" ? 0.3 : 0.02)
+      });
+      const topMesh = new THREE.Mesh(topGeo, padMat);
+      topMesh.position.set(b.cx, 0.01, b.cz);
+      topMesh.receiveShadow = true;
+      chunkGrp.add(topMesh);
+
+      const animList = window.BiomeEnvBuilder.getAnimList(b.id);
+      window.BiomeEnvBuilder.addBasinFeature(THREE, chunkGrp, b, extraEnvTex, animList);
+      window.BiomeEnvBuilder.populateBiomeScenery(THREE, chunkGrp, b, bi, pads, sceneryDeps, animList);
+    });
+  }
+
   function steerAroundObstacles(ex, ez, dirX, dirZ) {
     let sx = dirX, sz = dirZ;
     for (let oi = 0; oi < worldObstacles.length; oi++) {
@@ -4912,6 +4906,10 @@
     for (let i = 0; i < BIOMES.length; i++) {
       const b = BIOMES[i];
       if (Math.abs(x - b.cx) <= 16.4 && Math.abs(z - b.cz) <= 16.4) {
+        if (b.id !== "forest" && window.BiomeEnvBuilder) {
+          const ly = window.BiomeEnvBuilder.sampleBiomeTerrainLocalY(b.id, x - b.cx, z - b.cz, i);
+          return Math.max(0.08, ly + 0.14);
+        }
         const edge = Math.max(Math.abs(x - b.cx), Math.abs(z - b.cz));
         return edge > 13.6 ? 0.35 : 0.12;
       }
@@ -5305,11 +5303,23 @@
       scene.fog.color.copy(currentFogColor);
       renderer.setClearColor(currentSkyColor, 1);
 
+      if (window.BiomeEnvBuilder && window.BiomeEnvBuilder.BIOME_ATMOSPHERE[bNow2.id]) {
+        const atmo = window.BiomeEnvBuilder.BIOME_ATMOSPHERE[bNow2.id];
+        const atmoRate = Math.min(1, dt * 2.2);
+        scene.fog.density += (atmo.fogDensity - scene.fog.density) * atmoRate;
+        hemiLight.color.lerp(linCol(atmo.hemiSky), atmoRate);
+        hemiLight.groundColor.lerp(linCol(atmo.hemiGround), atmoRate);
+        sunLight.color.lerp(linCol(atmo.sunCol), atmoRate);
+        sunLight.intensity += (atmo.sunInt - sunLight.intensity) * atmoRate;
+        window.BiomeEnvBuilder.updateAnimations(now, dt, biomeChunkGroups);
+      }
+
       // 3B. Landmarks, Environmental Hazards & Secret Underground Caves
       for (let li = 0; li < worldLandmarks.length; li++) {
         const lm = worldLandmarks[li];
         lm.orb.rotation.y += dt * 1.4;
-        lm.orb.position.y = 4.05 + Math.sin(now * 0.0022 + li) * 0.22;
+        const baseY = lm.baseOrbY !== undefined ? lm.baseOrbY : 4.05;
+        lm.orb.position.y = baseY + Math.sin(now * 0.0022 + li) * 0.16;
       }
 
       for (let hi = 0; hi < envHazards.length; hi++) {
